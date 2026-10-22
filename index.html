@@ -2451,19 +2451,20 @@ zoo 动物园 1
 
     var correct = item.m;
     var seen = {};
-    seen[correct] = true;
+    if (correct) seen[correct] = true;
     var distract = [];
+    // 干扰项：每次从整个词库随机抽互不相同的 3 个
+    var guard = 0;
+    while (distract.length < 3 && guard++ < 60) {
+      var pick = words[Math.floor(Math.random() * words.length)].m;
+      if (pick && !seen[pick]) { seen[pick] = true; distract.push(pick); }
+    }
+    // 词库太小时兜底补齐
     for (var i = 0; i < words.length && distract.length < 3; i++) {
       var m = words[i].m;
       if (m && !seen[m]) { seen[m] = true; distract.push(m); }
     }
-    var extraPool = poolForMode(mode);
-    for (var j = 0; j < extraPool.length && distract.length < 3; j++) {
-      var m2 = extraPool[j].m;
-      if (m2 && !seen[m2]) { seen[m2] = true; distract.push(m2); }
-    }
-    var picks = shuffle(distract.slice()).slice(0, 3);
-    var opts = shuffle([correct].concat(picks));
+    var opts = shuffle([correct].concat(distract));
     for (var k = 0; k < 4; k++) {
       optEls[k].textContent = opts[k] || '';
       optEls[k].className = opts[k] ? '' : 'hidden';
