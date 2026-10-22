@@ -1,0 +1,2941 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>单词过滤</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #fafafa; color: #212121; margin: 0;
+    padding: 14px 16px calc(10px + env(safe-area-inset-bottom));
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .ham {
+    background: transparent; border: none; color: #455A64;
+    font-size: 26px; line-height: 1; padding: 6px 10px 6px 2px; cursor: pointer;
+  }
+  .progress { flex: 1; color: #616161; font-size: 15px; }
+  .small {
+    background: #455A64; color: #fff; border: none; border-radius: 8px;
+    font-size: 13px; padding: 9px 12px; cursor: pointer;
+  }
+  .small:active { opacity: .8; }
+  .card {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    padding: 10px 0;
+  }
+  .word {
+    font-size: 50px; font-weight: 700; line-height: 1.25;
+    word-break: break-word; max-width: 100%;
+  }
+  .count { margin-top: 10px; color: #757575; font-size: 17px; }
+  .meaning {
+    margin-top: 22px; font-size: 23px; line-height: 1.5;
+    min-height: 60px; color: #bdbdbd; max-width: 100%;
+  }
+  .meaning.show { color: #1B5E20; font-weight: 600; }
+
+  /* 圆形顺时针倒计时 */
+  .timer { position: relative; width: 80px; height: 80px; margin-top: 14px; }
+  .timer svg { display: block; transform: rotate(-90deg); }
+  .ringBg { fill: none; stroke: #E0E0E0; stroke-width: 7; }
+  .ringFg {
+    fill: none; stroke: #1565C0; stroke-width: 7; stroke-linecap: round;
+    stroke-dasharray: 201.06; stroke-dashoffset: 0;
+  }
+  .timerNum {
+    position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 700; color: #455A64;
+  }
+
+  .nav { display: flex; gap: 10px; margin-bottom: 10px; }
+  .nav button {
+    flex: 1; height: 56px; border: none; border-radius: 12px;
+    color: #fff; font-size: 18px; cursor: pointer;
+  }
+  .nav button:active { opacity: .85; }
+  .prev { background: #5C6BC0; }
+  .next { background: #1565C0; }
+  .restart { background: #6D4C41; }
+  .back { background: #78909C; }
+  .btns { display: flex; gap: 10px; }
+  .btns button {
+    flex: 1; height: 72px; border: none; border-radius: 12px;
+    color: #fff; font-size: 21px; cursor: pointer;
+  }
+  .btns button:active { opacity: .85; }
+  .k { background: #2E7D32; }
+  .u { background: #C62828; }
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .options button {
+    min-height: 66px; border: none; border-radius: 12px; background: #546E7A;
+    color: #fff; font-size: 17px; line-height: 1.35; padding: 8px 6px; cursor: pointer;
+  }
+  .options button:active { opacity: .85; }
+  .options button.correct { background: #2E7D32; }
+  .options button.wrong { background: #C62828; opacity: .55; }
+  .footer { display: flex; gap: 8px; margin-top: 12px; }
+  .footer .small { flex: 1; background: #78909C; padding: 9px 4px; }
+  .status { text-align: center; color: #9E9E9E; font-size: 12px; margin-top: 9px; }
+  .byline {
+    text-align: center; color: #BDBDBD; font-size: 13px;
+    margin-top: 14px; letter-spacing: 1px;
+  }
+  .hidden { display: none !important; }
+
+  /* 菜单 */
+  #menu {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0,0,0,.45);
+  }
+  .menuBox {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 255px;
+    background: #fff; padding: 18px 14px; display: flex; flex-direction: column; gap: 8px;
+    overflow-y: auto;
+  }
+  .menuTitle { font-size: 14px; color: #9E9E9E; margin-bottom: 4px; }
+  .menuItem {
+    text-align: left; padding: 13px 12px; font-size: 16px;
+    background: #F5F5F5; border: none; border-radius: 10px; color: #212121; cursor: pointer;
+  }
+  .menuItem.active { background: #1565C0; color: #fff; }
+  .menuClose {
+    margin-top: auto; padding: 12px; font-size: 15px;
+    background: #E0E0E0; border: none; border-radius: 10px; color: #616161; cursor: pointer;
+  }
+
+  /* 记录列表面板 */
+  #panel {
+    position: fixed; inset: 0; z-index: 50; background: #fafafa;
+    display: none; flex-direction: column;
+    padding: 14px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+  #panel.open { display: flex; }
+  .panelTitle { font-size: 17px; font-weight: 700; }
+  .panelBtns { display: flex; gap: 8px; margin: 12px 0 8px; }
+  .panelBtns button { flex: 1; padding: 10px 2px; border: none; border-radius: 8px; font-size: 13px; color: #fff; background: #1565C0; cursor: pointer; }
+  .panelBtns button.alt { background: #78909C; }
+  .filters { display: flex; gap: 8px; margin: 6px 0 4px; }
+  .filters button {
+    flex: 1; padding: 9px 0; border: none; border-radius: 8px;
+    background: #E0E0E0; color: #424242; font-size: 14px; cursor: pointer;
+  }
+  .filters button.active { background: #455A64; color: #fff; }
+  #panelList { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .row {
+    display: flex; align-items: center; gap: 9px;
+    padding: 11px 6px; border-bottom: 1px solid #EEEEEE; font-size: 15px;
+    cursor: pointer;
+  }
+  .row:active { background: #EEEEEE; }
+  .row .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .row .dot.k { background: #2E7D32; }
+  .row .dot.u { background: #C62828; }
+  .row .dot.v { background: #EF6C00; }
+  .row b { font-size: 16px; flex: none; }
+  .row .m { color: #616161; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .c { color: #9E9E9E; font-size: 12px; flex: none; }
+  .empty { text-align: center; color: #BDBDBD; padding: 40px 0; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <button class="ham" id="menuBtn" aria-label="菜单">☰</button>
+  <div class="progress" id="progress">第 1 / 0 · 已标记 0</div>
+  <button class="small" id="listBtn">记录</button>
+  <button class="small" id="jumpBtn">跳转</button>
+</div>
+
+<div class="card">
+  <div class="word" id="word">单词过滤</div>
+  <div class="timer hidden" id="timer">
+    <svg width="80" height="80" viewBox="0 0 80 80">
+      <circle class="ringBg" cx="40" cy="40" r="32"></circle>
+      <circle class="ringFg" id="ringFg" cx="40" cy="40" r="32"></circle>
+    </svg>
+    <div class="timerNum" id="timerNum">5</div>
+  </div>
+  <div class="count" id="count">出现次数：0</div>
+  <div class="meaning" id="meaning">按下按钮后显示中文</div>
+</div>
+
+<div class="nav" id="nav">
+  <button class="prev" id="prevBtn">← 上一个</button>
+  <button class="next" id="nextBtn">下一个 →</button>
+  <button class="back" id="backBtn" style="display:none">← 回到单词</button>
+  <button class="restart" id="restartBtn" style="display:none">重新开始 ↺</button>
+</div>
+
+<div class="btns" id="btns">
+  <button class="k" id="btnKnow">认识</button>
+  <button class="u" id="btnUnknown">不认识</button>
+</div>
+
+<div class="options hidden" id="options">
+  <button id="opt0"></button>
+  <button id="opt1"></button>
+  <button id="opt2"></button>
+  <button id="opt3"></button>
+</div>
+
+<div class="footer" id="footerTest">
+  <button class="small" id="importBtn">导入TXT</button>
+  <button class="small" id="exportBtn">导出记录</button>
+  <button class="small" id="resetBtn">清空记录</button>
+</div>
+
+<div class="footer hidden" id="footerQuiz">
+  <button class="small" id="quizImportBtn">导入记录TXT</button>
+  <button class="small" id="quizUseBtn">用当前记录</button>
+  <button class="small" id="quizShuffleBtn">重排抽题</button>
+</div>
+
+<div class="status" id="status">导出的记录文件含进度，可再导入接着背</div>
+<div class="byline">by NIX7</div>
+
+<!-- 功能菜单 -->
+<div id="menu" class="hidden">
+  <div class="menuBox">
+    <div class="menuTitle">功能菜单</div>
+    <button class="menuItem active" data-mode="test">① 测试</button>
+    <button class="menuItem" data-mode="quizKnown">② 认识词测试</button>
+    <button class="menuItem" data-mode="quizUnknown">③ 不认识词学习</button>
+    <button class="menuItem" data-mode="timedKnown">④ 限时认识词</button>
+    <button class="menuItem" data-mode="timedUnknown">⑤ 限时不认识词</button>
+    <button class="menuItem" data-mode="timedMixed">⑥ 混合限时</button>
+    <button class="menuClose" id="menuClose">关闭</button>
+  </div>
+</div>
+
+<!-- 记录列表面板 -->
+<div id="panel">
+  <div class="top">
+    <div class="panelTitle" id="panelTitle">单词记录</div>
+    <button class="small" id="panelClose">关闭</button>
+  </div>
+  <div class="panelBtns">
+    <button id="panelImport">导入记录文件</button>
+    <button id="panelExport">导出记录</button>
+    <button class="alt" id="panelClear">清空</button>
+  </div>
+  <div class="filters">
+    <button data-f="all" class="active">全部</button>
+    <button data-f="unknown">不认识</button>
+    <button data-f="known">认识</button>
+  </div>
+  <div id="panelList"></div>
+</div>
+
+<input type="file" id="fileInputLib" class="hidden" accept=".txt,text/plain">
+<input type="file" id="fileInputRec" class="hidden" accept=".txt,text/plain">
+<input type="file" id="fileInputQuiz" class="hidden" accept=".txt,text/plain">
+
+<script type="text/plain" id="worddata">
+all 全部；所有的 11
+also 也；而且 11
+an 一（个） 11
+and 和；与；又 11
+as 像；作为；因为 11
+at 在；在……处 11
+be 是；成为；存在 11
+but 但是；除了 11
+can 能；可以 11
+could 能够；可以 11
+day 天；白天 11
+do 做；干 11
+find 找到；发现 11
+for 为了；给；因为 11
+from 从；来自 11
+go 去；走 11
+good 好的 11
+have 有；已经 11
+he 他 11
+help 帮助 11
+her 她的；她 11
+him 他（宾格） 11
+his 他的 11
+how 怎样；多么 11
+in 在……里；在……期间 11
+it 它 11
+know 知道；认识；了解 11
+late 迟的；晚的 11
+leave 离开；留下 11
+like 喜欢；像 11
+make 制作；使得 11
+many 许多 11
+me 我（宾格） 11
+my 我的 11
+need 需要 11
+not 不；没有 11
+now 现在 11
+of ……的；属于 11
+on 在……上；关于 11
+one 一；一个 11
+or 或者；否则 11
+other 其他的；另一个 11
+out 出去；在外 11
+people 人们；人民 11
+read 阅读；读 11
+say 说；讲 11
+school 学校 11
+see 看见；明白 11
+she 她 11
+so 所以；如此 11
+some 一些；某些 11
+take 拿；带；花费 11
+that 那个；那；引导从句 11
+the 这；那（定冠词） 11
+their 他们的 11
+them 他们（宾格） 11
+there 那里；存在 11
+they 他们；她们；它们 11
+thing 事情；东西 11
+think 想；认为 11
+this 这个；这 11
+time 时间；次数 11
+to 到；向；给 11
+up 向上；起来 11
+use 使用；利用 11
+very 非常；很 11
+we 我们 11
+well 好；健康的；井 11
+what 什么；多么 11
+when 什么时候；当……时 11
+with 和；用；带有 11
+work 工作；起作用 11
+year 年 11
+you 你；你们 11
+your 你的；你们的 11
+about 关于；大约 10
+after 在……之后 10
+ask 问；请求；要求 10
+because 因为 10
+book 书；预订 10
+by 通过；被；在……旁边 10
+come 来；来到 10
+each 每个；每一 10
+eat 吃 10
+feel 感觉；觉得 10
+food 食物 10
+get 得到；获得；变得 10
+give 给；给予 10
+if 如果；是否 10
+life 生活；生命 10
+little 小的；少的；一点 10
+live 居住；生活；活的 10
+look 看；看起来 10
+old 老的；旧的 10
+our 我们的 10
+please 请；使高兴 10
+problem 问题 10
+sorry 对不起；难过的 10
+still 仍然；还 10
+student 学生 10
+such 这样的；如此的 10
+thank 感谢 10
+these 这些 10
+too 也；太；过于 10
+want 想要；需要 10
+way 方法；道路 10
+where 在哪里；……的地方 10
+which 哪一个；哪些 10
+who 谁 10
+will 将要；会；意愿 10
+worry 担心；发愁 10
+always 总是；一直 9
+away 离开；远离 9
+become 变成；成为 9
+before 在……之前 9
+begin 开始 9
+big 大的；重大的 9
+call 打电话；称呼；叫 9
+different 不同的 9
+every 每一个；所有的 9
+first 第一；首先 9
+friend 朋友 9
+great 伟大的；极好的 9
+hard 困难的；努力地；硬的 9
+hope 希望 9
+into 进入；到……里 9
+long 长的；长时间 9
+lot 许多；大量 9
+may 可以；也许 9
+meet 遇见；会面 9
+move 移动；搬动 9
+much 许多；非常 9
+never 从不；绝不 9
+new 新的 9
+no 不；没有；无 9
+only 只；仅仅；唯一的 9
+part 部分；角色 9
+tell 告诉；讲述 9
+than 比 9
+then 然后；那时 9
+us 我们（宾格） 9
+why 为什么 9
+world 世界 9
+would 将会；愿意 9
+write 写；写作 9
+around 在周围；大约 8
+back 回来；后面；背部 8
+change 改变；变化 8
+class 班级；课 8
+down 向下；沿着 8
+even 甚至；更 8
+finish 完成；结束 8
+grow 生长；种植 8
+here 这里 8
+home 家 8
+idea 主意；想法 8
+job 工作；职业 8
+just 刚刚；只是；正好 8
+kind 种类；善良的 8
+large 大的；巨大的 8
+learn 学习；学会 8
+let 让；允许 8
+mary 玛丽（人名） 8
+matter 事情；要紧 8
+must 必须；一定 8
+next 下一个的；接下来 8
+own 自己的；拥有 8
+parent 父母；家长 8
+play 玩；播放；比赛 8
+right 正确的；右边；权利 8
+should 应该 8
+show 展示；表明 8
+since 自从；因为 8
+small 小的 8
+something 某事；某物 8
+soon 很快；不久 8
+spend 花费；度过 8
+stop 停止；车站 8
+those 那些 8
+try 尝试；努力 8
+two 二；两个 8
+usually 通常；一般 8
+yesterday 昨天 8
+another 另一个；再一个 7
+answer 回答；答案 7
+believe 相信 7
+between 在……之间 7
+child 孩子 7
+company 公司；陪伴 7
+decide 决定 7
+difficult 困难的 7
+easy 容易的 7
+end 结束；末端 7
+enough 足够的；足够地 7
+few 少数；几个 7
+five 五；五个 7
+house 房子；住宅 7
+however 然而；可是 7
+its 它的 7
+last 最后的；持续 7
+man 男人；人 7
+mean 意思是；意味着 7
+off 离开；关掉；休息 7
+often 经常；常常 7
+open 打开；开着的 7
+over 在……上方；超过；结束 7
+place 地方；放置 7
+plan 计划 7
+put 放；放置 7
+realize 意识到；实现 7
+really 真正地；确实 7
+same 相同的 7
+send 发送；寄 7
+share 分享；共用 7
+start 开始；出发 7
+study 学习；研究 7
+surprise 使惊奇；惊奇 7
+today 今天；现今 7
+tom 汤姆（人名） 7
+tomorrow 明天 7
+until 直到……为止 7
+wait 等待 7
+walk 步行；走 7
+week 星期；周 7
+welcome 欢迎 7
+without 没有；不带 7
+woman 妇女；女人 7
+yes 是；好的 7
+young 年轻的 7
+able 能够的；有能力的 6
+afraid 害怕的；担心的 6
+agree 同意 6
+animal 动物 6
+any 任何；一些 6
+bird 鸟 6
+break 打破；休息 6
+brother 兄弟 6
+car 小汽车 6
+chance 机会；可能性 6
+city 城市 6
+course 课程；过程 6
+cry 哭；喊叫 6
+develop 发展；开发 6
+during 在……期间 6
+early 早的；提早 6
+energy 精力；能量 6
+fall 落下；秋天 6
+family 家庭；家人 6
+favorite 最喜爱的 6
+garden 花园 6
+girl 女孩 6
+group 组；群 6
+happen 发生 6
+hear 听见；听说 6
+heart 心脏；内心 6
+hold 握住；举行 6
+hospital 医院 6
+important 重要的 6
+interest 兴趣；使感兴趣 6
+keep 保持；保存 6
+love 爱；喜欢 6
+luck 运气 6
+might 可能；也许 6
+mind 介意；头脑；心思 6
+morning 早晨；上午 6
+mother 母亲；妈妈 6
+nice 美好的；友好的 6
+night 夜晚 6
+offer 提供；主动提出 6
+once 一次；曾经；一旦 6
+past 过去的；经过 6
+person 人 6
+pick 采摘；挑选 6
+plane 飞机 6
+pleasure 愉快；乐事 6
+research 研究 6
+room 房间；空间 6
+run 跑；经营 6
+seem 似乎；好像 6
+speak 说；讲 6
+story 故事 6
+sure 确信的；当然 6
+teacher 教师；老师 6
+three 三；三个 6
+together 一起 6
+train 火车；训练 6
+tree 树 6
+whether 是否；不管 6
+while 当……时候；而 6
+word 单词；话语 6
+wrong 错误的 6
+activity 活动 5
+age 年龄；时代 5
+along 沿着；一起 5
+although 虽然；尽管 5
+angry 生气的 5
+arrive 到达；抵达 5
+bad 坏的；严重的 5
+beautiful 美丽的 5
+both 两者都；双方 5
+boy 男孩 5
+bring 带来 5
+business 生意；商业；事务 5
+buy 买；购买 5
+carry 搬运；携带 5
+catch 抓住；赶上 5
+create 创造；创作 5
+depend 依靠；取决于 5
+distance 距离 5
+everyone 每个人；人人 5
+example 例子；榜样 5
+exercise 锻炼；练习 5
+face 脸；面对 5
+father 父亲；爸爸 5
+fix 修理；固定 5
+follow 跟随；遵循 5
+future 未来；将来 5
+happy 快乐的 5
+healthy 健康的 5
+hi 嗨；你好 5
+himself 他自己 5
+homework 家庭作业 5
+hungry 饥饿的 5
+information 信息；资料 5
+john 约翰（人名） 5
+light 光；轻的；灯 5
+machine 机器 5
+miss 错过；想念 5
+money 钱；金钱 5
+mr 先生（Mr.） 5
+music 音乐 5
+name 名字；命名 5
+nothing 没有什么 5
+order 命令；订购；顺序 5
+park 公园；停车 5
+perhaps 也许；可能 5
+possible 可能的 5
+provide 提供 5
+question 问题 5
+quite 相当；十分 5
+remember 记得；记住 5
+return 返回；归还 5
+road 道路 5
+second 第二；秒 5
+set 设置；一套 5
+several 几个；若干 5
+simply 简单地；仅仅 5
+sister 姐妹 5
+skill 技能；技巧 5
+smith 史密斯（姓氏） 5
+solution 解决办法 5
+someone 某人；有人 5
+sometimes 有时；间或 5
+sound 声音；听起来 5
+sport 运动 5
+stand 站立；忍受 5
+station 车站；站 5
+step 步骤；脚步；跨步 5
+street 街道 5
+summer 夏天 5
+talk 谈话；交谈 5
+teach 教；教导 5
+though 虽然；尽管 5
+through 穿过；通过；从头到尾 5
+town 城镇 5
+travel 旅行 5
+turn 转动；转变；轮流 5
+understand 理解；明白 5
+unhappy 不快乐的 5
+village 村庄 5
+watch 观看；手表 5
+water 水；浇水 5
+weather 天气 5
+accident 事故；意外 4
+ago 以前 4
+ahead 在前面；提前 4
+air 空气；空中 4
+alone 独自的；单独的 4
+american 美国的；美国人 4
+area 地区；面积 4
+arm 手臂；胳膊 4
+attention 注意；注意力 4
+breakfast 早餐 4
+brown 棕色的；布朗（姓氏） 4
+build 建造；建立 4
+busy 忙碌的 4
+calm 平静的；使平静 4
+care 关心；照料；小心 4
+carefully 仔细地 4
+cause 原因；导致 4
+chinese 中国的；汉语；中国人 4
+choice 选择 4
+choose 选择 4
+close 关闭；接近的 4
+cook 烹饪；厨师 4
+dangerous 危险的 4
+dinner 晚餐；正餐 4
+dish 碟；盘；菜肴 4
+doctor 医生 4
+dog 狗 4
+door 门 4
+drink 喝；饮料 4
+drop 掉落；下降；放弃 4
+earth 地球；土地 4
+eight 八；八个 4
+either （两者中）任一；也 4
+else 其他的；别的 4
+encourage 鼓励 4
+english 英语；英国的 4
+enjoy 享受；喜爱 4
+environment 环境 4
+ever 曾经；在任何时候 4
+everything 每件事；一切 4
+experience 经历；经验 4
+famous 著名的 4
+finally 最后；终于 4
+forget 忘记 4
+four 四；四个 4
+free 自由的；免费的 4
+fruit 水果 4
+full 满的；完全的 4
+health 健康 4
+hello 你好 4
+high 高的 4
+hill 小山 4
+holiday 假日；假期 4
+hotel 旅馆；酒店 4
+human 人类；人的 4
+improve 改进；提高 4
+jane 简（人名） 4
+lead 带领；导致；铅 4
+lesson 课；教训 4
+letter 信；字母 4
+li 李（姓氏） 4
+lose 失去；输 4
+low 低的 4
+manager 经理 4
+meal 一餐；饭 4
+middle 中间的；中部 4
+month 月；月份 4
+near 在……附近；近的 4
+none 没有一个；毫无 4
+nowadays 如今；现在 4
+number 数字；号码 4
+ocean 海洋 4
+oil 油；石油 4
+outside 在外面；外部 4
+pass 经过；通过；传递 4
+patient 病人；耐心的 4
+piece 片；块；件 4
+plant 植物；种植 4
+poor 贫穷的；可怜的 4
+popular 受欢迎的；流行的 4
+prepare 准备 4
+project 项目；工程 4
+raise 举起；提高；抚养 4
+real 真实的；真正的 4
+receive 收到；接收 4
+red 红色的 4
+rice 大米；米饭 4
+rich 富有的；丰富的 4
+sell 卖；出售 4
+shall 将要；应该 4
+shout 喊叫；呼喊 4
+sick 生病的 4
+sit 坐 4
+sleep 睡觉 4
+smile 微笑 4
+suddenly 突然 4
+suggest 建议 4
+surprisingly 令人惊讶地 4
+tall 高的 4
+task 任务 4
+tea 茶 4
+ten 十；十个 4
+themselves 他们自己；她们自己；它们自己 4
+third 第三 4
+true 真实的；正确的 4
+under 在……下面；少于 4
+university 大学 4
+warm 温暖的 4
+weekend 周末 4
+white 白色的；怀特（姓氏） 4
+win 赢；获胜 4
+winter 冬天 4
+wish 希望；祝愿 4
+wonderful 极好的；精彩的 4
+writer 作家；作者 4
+yet 还；仍然；然而 4
+yourself 你自己 4
+ability 能力；才能 3
+across 穿过；横过 3
+action 行动；行为 3
+adult 成年人 3
+afford 负担得起；买得起 3
+again 又；再 3
+airport 机场 3
+allow 允许；准许 3
+already 已经 3
+anything 任何事物 3
+apply 申请；应用 3
+attend 出席；参加 3
+attract 吸引 3
+banana 香蕉 3
+basketball 篮球 3
+bed 床 3
+beijing 北京 3
+beside 在……旁边 3
+bus 公共汽车 3
+canada 加拿大 3
+cat 猫 3
+certainly 当然；必定 3
+challenge 挑战 3
+china 中国 3
+classroom 教室 3
+coal 煤 3
+coffee 咖啡 3
+cold 冷的；感冒 3
+color 颜色 3
+competition 比赛；竞争 3
+computer 电脑；计算机 3
+control 控制；管理 3
+cooking 烹饪；做饭 3
+cost 花费；成本 3
+country 国家；乡村 3
+cover 覆盖；遮盖；封面 3
+cut 切；剪 3
+death 死亡 3
+decision 决定 3
+delicious 美味的 3
+describe 描述 3
+design 设计 3
+development 发展；开发 3
+disappoint 使失望 3
+discover 发现 3
+discussion 讨论；谈论 3
+dream 梦想；做梦 3
+easily 容易地 3
+education 教育 3
+effect 影响；效果 3
+egg 鸡蛋 3
+electricity 电；电力 3
+equipment 设备；装备 3
+evening 傍晚；晚上 3
+excite 使兴奋 3
+excuse 原谅；借口 3
+expensive 昂贵的 3
+experiment 实验 3
+eye 眼睛 3
+factory 工厂 3
+fail 失败；不及格 3
+farm 农场 3
+fine 好的；晴朗的；罚款 3
+fish 鱼；钓鱼 3
+foot 脚；英尺 3
+football 足球 3
+fresh 新鲜的 3
+front 前面；前部的 3
+fuel 燃料 3
+fun 乐趣；有趣的 3
+gain 获得；增加 3
+grade 年级；分数 3
+green 绿色的；格林（姓氏） 3
+ground 地面；场地 3
+guide 向导；指导 3
+habit 习惯 3
+hand 手；递交 3
+happiness 幸福；快乐 3
+head 头；首领；前往 3
+helpful 有帮助的 3
+hide 隐藏 3
+hit 打；击中 3
+hour 小时 3
+huge 巨大的 3
+hurt 伤害；疼痛 3
+ice 冰 3
+ill 生病的 3
+immediately 立即；马上 3
+importance 重要性 3
+internet 互联网 3
+itself 它自己 3
+join 加入；参加 3
+jump 跳；跳跃 3
+kid 小孩；开玩笑 3
+land 土地；着陆 3
+lie 躺；说谎；谎言 3
+listen 听；倾听 3
+local 当地的；地方的 3
+london 伦敦 3
+lovely 可爱的；美好的 3
+lunch 午餐 3
+market 市场 3
+member 成员 3
+million 百万 3
+minute 分钟 3
+mrs 夫人；太太（Mrs.） 3
+neighbor 邻居 3
+nervous 紧张的；神经的 3
+news 新闻；消息 3
+nurse 护士 3
+oh 哦；啊 3
+online 在线的 3
+pain 疼痛；痛苦 3
+paper 纸；报纸；试卷 3
+pay 支付；付钱 3
+phone 电话；打电话 3
+photo 照片 3
+picture 图片；照片 3
+playground 操场 3
+point 点；要点；指出 3
+present 目前的；礼物；呈现 3
+probably 可能；大概 3
+promise 承诺；答应 3
+public 公共的；公众 3
+race 赛跑；种族 3
+recently 最近 3
+reduce 减少；降低 3
+relax 放松 3
+repair 修理 3
+reply 回答；回复 3
+require 需要；要求 3
+rest 休息；剩余 3
+restaurant 餐馆；饭店 3
+rise 上升；升起 3
+river 河流 3
+sad 悲伤的 3
+sadness 悲伤；难过 3
+satisfy 使满意 3
+sea 海；海洋 3
+search 搜寻；搜索 3
+sense 感觉；意识 3
+shake 摇动；颤抖 3
+signal 信号 3
+simple 简单的 3
+six 六；六个 3
+slowly 慢慢地 3
+son 儿子 3
+song 歌曲 3
+south 南方；南部的 3
+space 空间；太空 3
+speech 演讲；言语 3
+speed 速度 3
+stay 停留；保持 3
+store 商店；储存 3
+stranger 陌生人 3
+strong 强壮的；坚固的 3
+success 成功 3
+successful 成功的 3
+supply 供应；供给 3
+support 支持；支撑 3
+sweet 甜的；糖果 3
+table 桌子；表格 3
+team 队；组 3
+test 测试；考试 3
+therefore 因此；所以 3
+tooth 牙齿 3
+truth 真相；事实 3
+type 类型；打字 3
+useful 有用的 3
+visit 参观；拜访 3
+warn 警告；提醒 3
+wash 洗；冲洗 3
+waste 浪费；废弃物 3
+weight 重量；体重 3
+whenever 无论何时；每当 3
+whole 整个的；全部的 3
+wife 妻子 3
+window 窗户 3
+worth 值得的；价值 3
+abroad 在国外；到国外 2
+accept 接受；同意 2
+accord 一致；符合（according据此） 2
+achievement 成就；成绩 2
+active 积极的；活跃的 2
+actually 实际上 2
+add 添加；增加 2
+affect 影响 2
+africa 非洲 2
+almost 几乎；差不多 2
+among 在……之中 2
+amount 数量；金额 2
+anyone 任何人 2
+appear 出现；显得 2
+apple 苹果 2
+approach 接近；方法 2
+argue 争论；争吵 2
+article 文章；物品 2
+august 八月 2
+available 可获得的；有空的 2
+average 平均的；平均数 2
+avoid 避免 2
+baby 婴儿；宝宝 2
+baggage 行李 2
+ball 球 2
+bear 熊；忍受 2
+bedroom 卧室 2
+bee 蜜蜂 2
+being 存在；生物；人类 2
+benefit 好处；受益 2
+beyond 超出；在……之外 2
+bicycle 自行车 2
+bike 自行车 2
+bill 比尔（人名）；账单 2
+birthday 生日 2
+blank 空白的；空白 2
+blow 吹；打击 2
+body 身体 2
+bore 使厌烦 2
+box 盒子；箱子 2
+bread 面包 2
+candy 糖果 2
+center 中心；中央 2
+century 世纪 2
+cheer 欢呼；加油 2
+chicken 鸡肉；鸡 2
+chief 首领；主要的 2
+civilization 文明 2
+clean 干净的；清洁 2
+cleaning 打扫；清洁 2
+club 俱乐部 2
+college 学院；大学 2
+comfortable 舒适的 2
+common 常见的；共同的 2
+complain 抱怨；投诉 2
+completely 完全地 2
+condition 条件；状况 2
+confident 自信的；有把握的 2
+congratulation 祝贺 2
+connection 联系；连接 2
+conversation 谈话；对话 2
+cookie 饼干 2
+couple 一对；夫妇 2
+cup 杯子 2
+customer 顾客 2
+dance 跳舞 2
+danger 危险 2
+daughter 女儿 2
+dear 亲爱的 2
+deep 深的 2
+degree 度数；程度；学位 2
+destroy 破坏；摧毁 2
+die 死；死亡 2
+difference 差别；不同 2
+difficulty 困难 2
+disease 疾病 2
+doorbell 门铃 2
+driver 司机 2
+duck 鸭子 2
+due 到期的；由于 2
+ear 耳朵 2
+effective 有效的 2
+effort 努力 2
+enter 进入；参加 2
+especially 尤其；特别 2
+everywhere 到处；各处 2
+exchange 交换；交流 2
+expect 期望；预料 2
+expert 专家 2
+explain 解释；说明 2
+failure 失败 2
+far 远的；遥远 2
+farmer 农民；农场主 2
+fast 快的；迅速地 2
+feeling 感觉；感受 2
+fifth 第五 2
+fill 装满；填写 2
+final 最后的；最终的 2
+flight 航班；飞行 2
+flower 花 2
+fly 飞；飞行 2
+former 以前的；前任的 2
+france 法国 2
+friendly 友好的 2
+friendship 友谊；友情 2
+frighten 使害怕；惊吓 2
+fully 完全地；充分地 2
+gift 礼物 2
+glad 高兴的；乐意的 2
+gold 金子；金色的 2
+grandparent 祖父母；外祖父母 2
+gun 枪 2
+hair 头发 2
+hardly 几乎不 2
+harvest 收获；收割 2
+heat 热；加热 2
+heavy 重的；沉重的 2
+herself 她自己 2
+hole 洞；孔 2
+hot 热的 2
+housework 家务 2
+hurry 匆忙；赶紧 2
+identify 识别；确认 2
+impossible 不可能的 2
+include 包括 2
+increase 增加；增长 2
+inside 在里面；内部 2
+invent 发明 2
+invention 发明 2
+invite 邀请 2
+joke 笑话；玩笑 2
+journey 旅程；旅行 2
+kill 杀死 2
+king 国王；金（姓氏） 2
+knock 敲；敲门 2
+lake 湖；湖泊 2
+language 语言 2
+laugh 笑；大笑 2
+leadership 领导；领导力 2
+lecture 讲座；演讲 2
+leg 腿 2
+lend 借出 2
+library 图书馆 2
+likely 可能的；很可能 2
+limit 限制；限度 2
+line 线；排；队伍 2
+loneliness 孤独 2
+lonely 孤独的 2
+luckily 幸运地 2
+madam 女士；夫人 2
+mail 邮件；邮寄 2
+main 主要的 2
+math 数学 2
+maybe 也许；大概 2
+meat 肉 2
+message 消息；信息 2
+metal 金属 2
+method 方法；办法 2
+mile 英里 2
+milk 牛奶；挤奶 2
+ming 明（人名） 2
+model 模型；模特；典范 2
+modern 现代的 2
+mom 妈妈 2
+moment 时刻；片刻 2
+mountain 山；山脉 2
+mouse 老鼠 2
+movie 电影 2
+myself 我自己 2
+native 本地的；本地人 2
+natural 自然的 2
+nature 大自然；性质 2
+neither 两者都不 2
+nine 九；九个 2
+nobody 没有人 2
+noise 噪音；吵闹声 2
+noisy 吵闹的 2
+non 非；无（前缀） 2
+nose 鼻子 2
+observe 观察；遵守 2
+office 办公室 2
+officially 正式地 2
+opinion 意见；看法 2
+outdoor 户外的 2
+overeat 吃得过多 2
+pace 步伐；速度 2
+page 页；页面 2
+party 聚会；政党 2
+perform 表演；执行 2
+period 时期；周期；句号 2
+personal 个人的 2
+peter 彼得（人名） 2
+pity 遗憾；同情 2
+plastic 塑料 2
+plentiful 丰富的；充足的 2
+police 警察 2
+position 位置；职位 2
+positive 积极的；肯定的；阳性的 2
+pot 罐；锅 2
+potato 土豆；马铃薯 2
+power 力量；电力；权力 2
+powerful 强大的；有力的 2
+pretend 假装 2
+prize 奖品；奖金 2
+process 过程；加工 2
+produce 生产；产生 2
+product 产品 2
+professional 专业的 2
+progress 进步；进展 2
+properly 适当地；正确地 2
+protect 保护 2
+protection 保护；防护 2
+proud 自豪的；骄傲的 2
+publish 出版；发表 2
+pull 拉；拖 2
+push 推；推动 2
+quantity 数量 2
+quickly 快速地 2
+rain 雨；下雨 2
+ready 准备好的 2
+reason 原因；理由 2
+recognize 认出；识别 2
+regularly 有规律地；经常 2
+remind 提醒 2
+repeat 重复 2
+researcher 研究员；研究者 2
+respond 回应；回答 2
+result 结果；成绩 2
+ring 戒指；铃声；打电话 2
+rock 岩石；摇滚 2
+role 角色；作用 2
+rome 罗马（城市） 2
+rubbish 垃圾 2
+rude 粗鲁的；无礼的 2
+rule 规则；统治 2
+rush 冲；匆忙；奔 2
+russia 俄罗斯 2
+safe 安全的 2
+salad 沙拉；色拉 2
+saturday 星期六 2
+scare 使害怕 2
+scene 场景；现场 2
+science 科学 2
+scientist 科学家 2
+seldom 很少；难得 2
+serve 服务；供应 2
+seven 七；七个 2
+seventh 第七 2
+sharp 锋利的；灵敏的 2
+shop 商店；购物 2
+shopping 购物 2
+short 短的；矮的 2
+side 边；侧面 2
+sing 唱歌 2
+single 单一的；单身的 2
+sir 先生；阁下 2
+size 尺寸；大小 2
+skin 皮肤 2
+sky 天空 2
+smell 闻；气味 2
+soft 柔软的；温柔的 2
+solve 解决；解答 2
+somebody 某人 2
+source 来源；源头 2
+speaker 说话者；扬声器 2
+special 特别的；专门的 2
+spread 传播；伸展 2
+spring 春天；泉水 2
+star 星星；明星 2
+state 状态；国家；陈述 2
+steam 蒸汽 2
+straw 吸管；稻草 2
+strength 力量；力气 2
+struggle 奋斗；挣扎 2
+subject 科目；主题 2
+sugar 糖；食糖 2
+suit 适合；套装 2
+sun 太阳 2
+surely 肯定地；想必 2
+technical 技术的 2
+technology 技术；科技 2
+temperature 温度；气温 2
+tend 倾向；往往会 2
+tennis 网球 2
+term 学期；术语 2
+thief 小偷 2
+throw 扔；投掷 2
+tool 工具 2
+tourist 游客 2
+toward 向；朝 2
+toy 玩具 2
+traditional 传统的 2
+traffic 交通；车辆 2
+treat 对待；治疗；款待 2
+trick 诡计；把戏 2
+trip 旅行；旅途 2
+trouble 麻烦；困难 2
+twelve 十二；十二个 2
+ugly 丑陋的 2
+unexpected 意外的；想不到的 2
+unit 单元；单位 2
+unlike 不像；与……不同 2
+value 价值；重视 2
+vegetable 蔬菜 2
+view 景色；看法；观看 2
+visitor 参观者；游客 2
+voice 声音 2
+wake 醒来；唤醒 2
+wall 墙 2
+weak 虚弱的；弱的 2
+wedding 婚礼 2
+wheel 轮子 2
+wild 野生的；狂野的 2
+wildlife 野生动物 2
+wildly 疯狂地；猛烈地 2
+within 在……之内 2
+wonder 想知道；惊奇 2
+yale 耶鲁（大学） 2
+above 在……上方；超过 1
+absolutely 绝对地；完全地 1
+acceptable 可接受的 1
+account 账户；账目；解释 1
+act 行动；表演；法案 1
+actively 积极地 1
+adjust 调整；适应 1
+admit 承认；准许进入 1
+advantage 优势；优点 1
+advertisement 广告 1
+advice 建议；忠告 1
+advise 建议；劝告 1
+african 非洲的；非洲人 1
+afternoon 下午 1
+against 反对；靠着；违反 1
+ah 啊（感叹词） 1
+alan 艾伦（人名） 1
+alarm 警报；闹钟 1
+algebra 代数 1
+alice 艾丽斯（人名） 1
+allowance 零用钱；津贴；允许 1
+america 美国；美洲 1
+ann 安（人名） 1
+anyway 无论如何；不管怎样 1
+anywhere 任何地方 1
+apart 分开；相隔 1
+appetite 食欲；胃口 1
+april 四月 1
+argument 争论；论据 1
+arrange 安排；整理 1
+arrest 逮捕；阻止 1
+art 艺术；美术 1
+asia 亚洲 1
+asleep 睡着的 1
+assignment 作业；任务；分配 1
+astonished 吃惊的；惊讶的 1
+astonishment 惊讶；惊愕 1
+astrologer 占星家 1
+attack 攻击；袭击 1
+attempt 尝试；企图 1
+attendant 服务员；乘务员 1
+attraction 吸引力；景点 1
+aunt 姑母；姨母；伯母 1
+author 作者 1
+autumn 秋天；秋季 1
+bag 包；袋子 1
+bamboo 竹子 1
+bank 银行；河岸 1
+banker 银行家 1
+bar 酒吧；棒 1
+bark 吠叫；树皮 1
+base 基础；基地 1
+basically 基本上；从根本上说 1
+basket 篮子 1
+beach 海滩 1
+beat 打败；敲打；跳动 1
+beauty 美丽；美人 1
+behave 表现；举止 1
+behavior 行为 1
+belief 信念；信仰；相信 1
+bell 铃；钟 1
+belong 属于 1
+bend 弯曲；弯腰 1
+beneficial 有益的；有利的 1
+bent 弯曲的；弯腰的 1
+bite 咬 1
+bitter 苦的；痛苦的 1
+blind 失明的；瞎的 1
+block 街区；块；堵塞 1
+blood 血液 1
+boat 船 1
+bob 鲍勃（人名） 1
+bobby 博比（人名） 1
+boil 煮沸；烧开 1
+bookcase 书柜；书架 1
+bookstore 书店 1
+born 出生的 1
+boss 老板；上司 1
+bother 打扰；麻烦 1
+bottom 底部；底端 1
+bowerman 鲍尔曼（人名） 1
+brain 大脑 1
+brand 品牌 1
+brave 勇敢的 1
+breakfaster 吃早餐的人 1
+breathe 呼吸 1
+bridge 桥 1
+bright 明亮的；聪明的 1
+brighter 更明亮的（bright的比较级） 1
+broadcast 广播；播出 1
+bud 花蕾；芽 1
+buffalo 水牛 1
+builder 建筑者；建造者 1
+burn 燃烧；烧伤 1
+cage 笼子 1
+cake 蛋糕 1
+calorie 卡路里；热量单位 1
+cameroon 喀麦隆 1
+camping 野营；露营 1
+cape 海角；斗篷 1
+cara 卡拉（人名） 1
+card 卡片；名片 1
+cardio 心脏的；有氧的 1
+career 职业；事业 1
+carelessly 粗心地；不小心地 1
+carol 卡罗尔（人名） 1
+caroline 卡罗琳（人名） 1
+cashier 收银员 1
+cattle 牛；家畜 1
+cell 细胞；牢房；电池 1
+central 中心的；中央的 1
+certain 确定的；某些 1
+certainty 确定；必然的事 1
+chain 链条；连锁 1
+chapter 章节 1
+character 角色；性格 1
+charge 收费；充电；指控 1
+chase 追赶；追逐 1
+chat 聊天 1
+cheap 便宜的 1
+check 检查；核对 1
+cheerfully 高兴地；愉快地 1
+chess 国际象棋 1
+christy 克里斯蒂（人名） 1
+cinema 电影院 1
+classmate 同学 1
+claw 爪子 1
+cleaner 清洁工；清洁剂 1
+clear 清楚的；清理；晴朗的 1
+clearly 清楚地；明确地 1
+clever 聪明的；机灵的 1
+climate 气候 1
+climb 爬；攀登 1
+clock 时钟 1
+clothing 衣服；服装 1
+coach 教练；长途汽车 1
+cobbler 补鞋匠 1
+cobra 眼镜蛇 1
+coin 硬币 1
+comment 评论 1
+communicate 交流；沟通 1
+compare 比较 1
+competitive 竞争的；有竞争力的 1
+complete 完整的；完成 1
+complicate 使复杂化 1
+concern 关心；担忧；涉及 1
+concert 音乐会 1
+conclusion 结论；结束 1
+confidence 信心；信任 1
+confirm 确认；证实 1
+connect 连接；联系 1
+connecticut 康涅狄格（美国州名） 1
+consider 考虑 1
+contact 联系；接触 1
+container 容器；集装箱 1
+contest 比赛；竞赛 1
+continue 继续 1
+contract 合同；契约 1
+contribution 贡献；捐献 1
+convenient 方便的 1
+cooker 炊具；炉灶 1
+cool 凉爽的；酷的；冷静的 1
+copy 复制；抄写；副本 1
+corn 玉米；谷物 1
+corner 角落；拐角 1
+correct 正确的；改正 1
+count 数；计数 1
+countryside 乡村；农村 1
+court 法庭；球场 1
+cow 母牛；奶牛 1
+cowboy 牛仔 1
+crab 螃蟹 1
+crazy 疯狂的；着迷的 1
+cream 奶油 1
+creature 生物；动物 1
+credit 信用；学分；赞扬 1
+criticism 批评；评论 1
+crop 庄稼；收成 1
+crowded 拥挤的 1
+culture 文化 1
+curious 好奇的 1
+custom 习俗；海关 1
+cutter 切割器；剪裁工 1
+daily 每日的；每天 1
+daria 达里娅（人名） 1
+deadly 致命的；极度的 1
+deal 处理；交易；协议 1
+december 十二月 1
+declare 宣布；声明 1
+deeply 深深地 1
+defeat 击败；打败 1
+deliver 递送；投递 1
+delivery 递送；交付 1
+description 描述 1
+deserve 值得；应得 1
+dessert 甜点；餐后甜食 1
+detail 细节；详情 1
+device 设备；装置 1
+dictionary 词典 1
+diet 饮食；节食 1
+differently 不同地 1
+direct 直接的 1
+direction 方向；指导 1
+dirt 尘土；泥土 1
+dirty 脏的；污秽的 1
+disable 使失去能力；使残疾 1
+disagree 不同意；有分歧 1
+disappear 消失；不见 1
+disaster 灾难 1
+discomfort 不舒服；不适 1
+discourage 使气馁；劝阻 1
+discuss 讨论 1
+dislike 不喜欢；厌恶 1
+ditch 沟渠；水沟 1
+donate 捐赠；捐献 1
+donkey 驴 1
+double 双倍的；两倍；加倍 1
+doubt 怀疑；疑问 1
+doubtful 怀疑的；不确定的 1
+dozen 一打；十二个 1
+dr 医生；博士（Dr.） 1
+draw 画；拉；吸引 1
+dress 连衣裙；穿衣；打扮 1
+drive 驾驶；开车 1
+dry 干的；使变干 1
+dug 挖掘（dig的过去式） 1
+dutch 荷兰的；荷兰语；荷兰人 1
+duty 职责；义务 1
+earn 挣得；赚得 1
+eater 食者；吃……的人 1
+egypt 埃及 1
+eighth 第八；第八个 1
+elderly 年长的；上了年纪的 1
+electric 电的；用电的 1
+electrical 电的；电气的 1
+electronic 电子的 1
+elephant 大象 1
+eleven 十一；十一个 1
+emerson 爱默生（人名） 1
+employee 雇员；员工 1
+endless 无尽的；无穷的 1
+engine 发动机；引擎 1
+engineer 工程师 1
+entire 整个的；全部的 1
+entrance 入口；进入 1
+environmental 环境的 1
+equally 平等地；同样地 1
+europe 欧洲 1
+evidence 证据；迹象 1
+examine 检查；审查；考试 1
+excellent 优秀的；极好的 1
+except 除了；除外 1
+excitement 兴奋；激动 1
+existence 存在；生存 1
+export 出口；输出 1
+express 表达；快车 1
+extra 额外的 1
+extremely 极其；非常 1
+fact 事实；真相 1
+fair 公平的；集市 1
+false 假的；错误的 1
+fan 迷；粉丝；风扇 1
+fear 害怕；恐惧 1
+february 二月 1
+fedex 联邦快递（FedEx） 1
+feed 喂养；饲养 1
+fence 栅栏；篱笆 1
+festival 节日；庆典 1
+fetch 取来；去拿 1
+fierce 凶猛的；激烈的 1
+fight 打架；斗争 1
+figure 数字；人物；身材；弄明白 1
+film 电影；胶卷 1
+finding 发现；调查结果 1
+fire 火；火灾；开火 1
+flat 平的；公寓 1
+flatter 更平的；更扁的 1
+flavor 味道；口味 1
+flier 传单；飞行员 1
+float 漂浮；浮动 1
+floor 地板；楼层 1
+fluently 流利地 1
+foreign 外国的；国外的 1
+foreigner 外国人 1
+forest 森林 1
+forever 永远；永久 1
+form 形式；表格；形成 1
+forty 四十；四十个 1
+forward 向前；前进 1
+fossil 化石 1
+fourth 第四；第四个 1
+fox 狐狸 1
+fred 弗雷德（人名） 1
+freeze 冻结；结冰 1
+french 法国的；法语；法国人 1
+fridge 冰箱 1
+frustration 沮丧；挫折 1
+function 功能；起作用 1
+furnace 火炉；熔炉 1
+galileo 伽利略（人名） 1
+garage 车库；修车厂 1
+gardener 园丁；花匠 1
+gas 气体；汽油 1
+gather 聚集；收集 1
+generally 通常；一般地 1
+gentleman 绅士；先生 1
+geographical 地理的；地理学的 1
+glass 玻璃；玻璃杯 1
+goodbye 再见 1
+graduate 毕业；毕业生 1
+grain 谷物；粮食 1
+grand 宏伟的；庄严的；极好的 1
+grandma 奶奶；外婆 1
+grass 草；草地 1
+grassland 草原；草地 1
+grateful 感激的；感谢的 1
+gratefulness 感激；感谢 1
+greece 希腊 1
+greek 希腊的；希腊语；希腊人 1
+greet 问候；迎接 1
+grocery 食品杂货（店） 1
+guangshui 广水（中国地名） 1
+guard 守卫；保卫；警卫 1
+guardian 监护人；保护人 1
+guess 猜测 1
+guest 客人；宾客 1
+guidance 指导；引导 1
+guideline 指导方针；准则 1
+guitar 吉他 1
+hairstyle 发型 1
+half 一半；半个 1
+halloween 万圣节前夕 1
+handle 处理；操作；把手 1
+handstand 倒立 1
+happily 快乐地；幸福地 1
+harmful 有害的 1
+harmless 无害的；无恶意的 1
+hat 帽子 1
+healthily 健康地 1
+heartbeat 心跳；心搏 1
+helen 海伦（人名） 1
+hire 雇用 1
+history 历史 1
+hobby 爱好；业余爱好 1
+holder 持有者；持有物 1
+homeless 无家可归的 1
+hometown 家乡 1
+honest 诚实的；正直的 1
+hong 洪（人名） 1
+hopefully 怀着希望地；但愿 1
+hopeless 无望的；绝望的 1
+horse 马 1
+horseback 马背 1
+horsemen 骑手（horseman的复数） 1
+housewife 家庭主妇 1
+humorous 幽默的 1
+hundred 一百；百 1
+hunger 饥饿 1
+hungrily 饥饿地 1
+hunter 猎人；猎手 1
+hurtful 伤人的；有害的 1
+husband 丈夫 1
+ignore 忽视；不理会 1
+illegal 非法的；违法的 1
+imagine 想象 1
+importantly 重要地（更重要的是） 1
+impress 给……留下印象；使钦佩 1
+impression 印象；感想 1
+improvement 改进；提高 1
+increasingly 越来越多地；日益 1
+indeed 确实；的确 1
+indicate 表明；指示 1
+individualized 个性化的；个体化的 1
+indonesia 印度尼西亚 1
+industrial 工业的 1
+industry 工业；行业 1
+influence 影响 1
+injure 伤害；使受伤 1
+insect 昆虫 1
+instead 代替；反而 1
+intelligent 聪明的；智能的 1
+interpersonal 人际的；人与人之间的 1
+interrupt 打断；中断 1
+introduce 介绍 1
+introduction 介绍；引进 1
+invader 入侵者 1
+inventor 发明者；发明家 1
+iron 铁；熨斗 1
+italy 意大利 1
+ivan 伊万（人名） 1
+jack 杰克（人名） 1
+jam 果酱；堵塞 1
+janna 詹娜（人名） 1
+jenny 珍妮（人名） 1
+jobless 失业的；无业的 1
+journal 期刊；日志 1
+jr 小（人名后缀Jr.） 1
+judge 法官；裁判；判断 1
+judy 朱迪（人名） 1
+juice 果汁 1
+july 七月 1
+karen 卡伦（人名） 1
+kilogram 千克；公斤 1
+kindly 和蔼地；友善地 1
+kindness 善良；仁慈；好意 1
+kitchen 厨房 1
+labor 劳动；劳动力 1
+lack 缺乏；缺少 1
+landlord 房东；地主 1
+layer 层；层次 1
+learner 学习者 1
+lemon 柠檬 1
+level 水平；级别；等级 1
+lewis 刘易斯（人名） 1
+lift 举起；电梯 1
+lincoln 林肯（人名） 1
+list 名单；清单 1
+litter 垃圾 1
+lock 锁；上锁 1
+loss 损失；失去；亏损 1
+loud 响亮的；大声的 1
+louder 更响亮的（loud的比较级） 1
+loudly 大声地 1
+lover 爱好者；情人 1
+lucky 幸运的 1
+luggage 行李 1
+luther 卢瑟（人名） 1
+magazine 杂志 1
+mailbox 邮箱；邮筒 1
+mainly 主要地 1
+maker 制造者；生产者 1
+manage 管理；设法做到 1
+mark 标记；分数；记号 1
+marry 结婚；嫁；娶 1
+martin 马丁（人名） 1
+mathematician 数学家 1
+mature 成熟的；长大 1
+mcdonald 麦当劳（McDonald's） 1
+meaning 意思；含义 1
+measure 测量；措施 1
+mechanical 机械的；力学的 1
+medicine 药；医学 1
+meeting 会议；会面 1
+melody 旋律；曲调 1
+melon 瓜；甜瓜 1
+melt 融化；熔化 1
+memorial 纪念的；纪念碑 1
+mental 精神的；智力的 1
+mention 提到；说起 1
+menu 菜单 1
+mick 米克（人名） 1
+mid 中间的；中部的 1
+midnight 午夜；半夜 1
+mike 迈克（人名） 1
+millionaire 百万富翁 1
+mirror 镜子 1
+miserably 悲惨地；痛苦地 1
+mistake 错误 1
+mistaken 错误的；弄错的 1
+mix 混合；搅拌 1
+modest 谦虚的；朴素的 1
+molly 莫莉（人名） 1
+monitor 显示器；班长；监控 1
+monkey 猴子 1
+moon 月亮；月球 1
+moscow 莫斯科 1
+movement 运动；移动；活动 1
+mum 妈妈（英） 1
+narrowly 勉强地；狭窄地 1
+naturally 自然地；当然 1
+nearby 附近的 1
+nearly 几乎；差不多 1
+necessary 必要的 1
+neck 脖子；颈部 1
+net 网；网络 1
+newspaper 报纸 1
+niagara 尼亚加拉（瀑布） 1
+nike 耐克（Nike品牌） 1
+nile 尼罗河 1
+normally 正常地；通常 1
+north 北方；北方的 1
+note 笔记；注释；注意 1
+notice 注意到；通知 1
+novel 小说 1
+november 十一月 1
+obese 肥胖的 1
+obey 服从；遵守 1
+object 物体；目标；反对 1
+observation 观察；观察力 1
+occasion 场合；时机 1
+ok 好；行（OK） 1
+operate 操作；运转；动手术 1
+operation 手术；操作；运行 1
+opportunity 机会；时机 1
+opposite 相反的；对面的 1
+orange 橙子；橙色的 1
+ordinary 普通的；平凡的 1
+original 最初的；原创的 1
+overnight 一夜之间；通宵 1
+overweight 超重的 1
+pad 垫；垫板；便笺本 1
+painfully 痛苦地；令人疼痛地 1
+pair 一对；一双 1
+pale 苍白的；浅色的 1
+paperwork 文书工作；文件 1
+paragraph 段落 1
+pardon 原谅；劳驾 1
+passage 文章；通道 1
+passenger 乘客；旅客 1
+payment 付款；支付 1
+peacefully 和平地；平静地 1
+pear 梨 1
+per 每；每一；按照 1
+perfect 完美的 1
+perfectly 完美地；完全地 1
+performance 表演；表现 1
+persuade 说服；劝说 1
+physical 身体的；物理的 1
+pianist 钢琴家；钢琴演奏者 1
+picnic 野餐 1
+pisa 比萨（意大利城市） 1
+player 运动员；球员；播放器 1
+pleased 高兴的；满意的 1
+plenty 大量；充足 1
+poem 诗；诗歌 1
+poet 诗人 1
+poisonous 有毒的 1
+polite 有礼貌的 1
+polluter 污染者；污染源 1
+pollution 污染 1
+polly 波莉（人名） 1
+pond 池塘 1
+pool 水池；游泳池 1
+population 人口 1
+possibility 可能性 1
+post 邮寄；岗位；张贴 1
+postman 邮递员 1
+pour 倒；倾泻 1
+practical 实际的；实用的 1
+practise 练习 1
+prefer 更喜欢；宁愿 1
+preference 偏好；偏爱 1
+prehistoric 史前的 1
+pretty 漂亮的；相当；颇 1
+private 私人的 1
+privately 私下地；秘密地 1
+production 生产；制作 1
+professor 教授 1
+profit 利润；收益 1
+promote 促进；提升；推销 1
+proper 适当的；正确的 1
+proudly 自豪地 1
+publisher 出版商 1
+puluet 普鲁埃特（人名） 1
+punctual 守时的；准时的 1
+punishment 惩罚；处罚 1
+purr （猫）发出咕噜声 1
+puzzle 谜；难题 1
+qingdao 青岛（中国城市） 1
+quality 质量；品质 1
+questionnaire 问卷；调查表 1
+quiet 安静的；平静的 1
+quit 放弃；停止；离开 1
+rabbit 兔子 1
+radio 收音机；无线电 1
+railway 铁路 1
+rainforest 雨林 1
+ralph 拉尔夫（人名） 1
+rapid 迅速的；快速的 1
+rate 比率；速度；价格 1
+rather 相当；宁愿；而不是 1
+reach 到达；达到；伸手够到 1
+reader 读者 1
+realistic 现实的；逼真的 1
+rebuilt 重建（rebuild的过去式） 1
+recent 最近的；近来的 1
+reflect 反映；反射；深思 1
+reformer 改革者 1
+refresh 使恢复精神；使清爽 1
+refreshed 精神焕发的 1
+regard 认为；看待；关于 1
+region 地区；区域 1
+rejection 拒绝 1
+relation 关系 1
+relationship 关系；联系 1
+relative 亲戚；相对的 1
+release 释放；发行 1
+reliable 可靠的；可信赖的 1
+remain 保持；留下；剩余 1
+remove 移除；去掉 1
+replace 代替；替换 1
+report 报告；报道 1
+reporter 记者 1
+reputation 名声；声誉 1
+request 请求；要求 1
+resource 资源 1
+response 回应；反应；答复 1
+responsible 负责的 1
+reusable 可重复使用的 1
+revive 复活；使苏醒；复兴 1
+ride 骑；乘坐 1
+roman 罗马的；罗马人 1
+root 根；根源 1
+rope 绳子 1
+rosa 罗莎（人名） 1
+rounded 圆形的；丰满的 1
+rubber 橡胶；橡皮 1
+runner 跑步者；赛跑者 1
+sail 航行；帆 1
+salary 薪水；工资 1
+salt 盐 1
+sam 山姆（人名） 1
+sandwich 三明治 1
+save 节省；拯救；保存 1
+scenery 风景；景色 1
+schoolmaster 校长；男教师 1
+scientific 科学的 1
+scotland 苏格兰 1
+season 季节 1
+seat 座位；坐下 1
+seattle 西雅图（美国城市） 1
+seek 寻找；寻求 1
+self 自己；自我 1
+senior 年长的；高年级的；高级的 1
+sentence 句子 1
+separate 分开；分离的 1
+serious 严肃的；严重的 1
+seriously 认真地；严重地 1
+servant 仆人；佣人 1
+server 服务器；服务员 1
+service 服务；服务项目 1
+shakespeare 莎士比亚（人名） 1
+shelf 架子；搁板 1
+shock 震惊；冲击 1
+shocked 震惊的；吃惊的 1
+shoe 鞋 1
+shortage 短缺；不足 1
+shovel 铲子；铁锹 1
+shy 害羞的；腼腆的 1
+sight 视力；景象；视野 1
+sign 标志；符号；签名 1
+silent 沉默的；安静的 1
+silly 愚蠢的；傻的 1
+similar 相似的 1
+simplify 简化；使简单 1
+singer 歌手；歌唱家 1
+situation 情况；形势 1
+skirt 裙子 1
+smart 聪明的；智能的 1
+smooth 光滑的；顺利的 1
+smoothly 顺利地；平滑地 1
+snack 小吃；零食 1
+snake 蛇 1
+snow 雪；下雪 1
+social 社会的；社交的 1
+society 社会；社团 1
+sofa 沙发 1
+softly 轻柔地；温柔地 1
+software 软件 1
+solar 太阳的；太阳能的 1
+solitary 孤独的；独居的 1
+someday 有一天 1
+somewhere 某处；在某地 1
+songbird 鸣鸟 1
+sooner 更早；不久 1
+sort 种类；分类；整理 1
+southern 南方的；南部的 1
+specially 特别地；专门地 1
+spiritually 精神上；心灵上 1
+spot 斑点；地点；发现 1
+spyglass 小型望远镜 1
+staff 职员；员工 1
+stage 舞台；阶段；举办 1
+standardize 使标准化 1
+steal 偷 1
+steep 陡峭的；急剧的 1
+stone 石头 1
+storm 暴风雨；风暴 1
+straight 直的；直接 1
+strategy 策略 1
+stream 小溪；流；流淌 1
+stress 压力；强调 1
+stretch 伸展；拉伸 1
+strict 严格的 1
+strike 罢工；打击；敲 1
+stroke 划水；抚摸；笔画 1
+strongly 强烈地；有力地 1
+stuck 卡住的；被困住的 1
+succeeded 成功（succeed的过去式） 1
+successfully 成功地 1
+sudden 突然的；忽然的 1
+suggestion 建议；提议 1
+sunday 星期天；星期日 1
+sunrise 日出 1
+sunshine 阳光；日照 1
+supermarket 超市 1
+supper 晚餐；晚饭 1
+supportive 支持的；鼓励的 1
+suppose 认为；猜想；假定 1
+survive 生存；幸存 1
+susan 苏珊（人名） 1
+swear 发誓；咒骂 1
+sweater 毛衣；针织衫 1
+swelter 闷热；热得难受 1
+swim 游泳 1
+tail 尾巴 1
+tale 故事；传说 1
+target 目标；靶子 1
+taste 品尝；味道 1
+taxi 出租车 1
+teamwork 团队合作 1
+tear 眼泪；撕破 1
+technique 技术；技巧 1
+teen 青少年 1
+teenage 青少年的 1
+telephone 电话；打电话 1
+telescope 望远镜 1
+television 电视 1
+temple 寺庙；神殿 1
+tent 帐篷 1
+terrible 可怕的；糟糕的 1
+terribly 非常；极其；可怕地 1
+terry 特里（人名） 1
+textbook 教科书 1
+theory 理论；学说 1
+thin 薄的；瘦的 1
+thoughtful 体贴的；深思的 1
+thousand 千；一千 1
+throughout 遍及；贯穿 1
+ticket 票；车票；门票 1
+tidy 整洁的；整理 1
+tie 领带；系；打结 1
+tip 尖端；小费；提示 1
+tire 使疲劳；疲倦 1
+tiring 令人疲倦的；累人的 1
+toe 脚趾 1
+tongue 舌头；语言 1
+tonight 今晚 1
+tony 托尼（人名） 1
+toothpaste 牙膏 1
+top 顶部；最高点 1
+topher 托弗（人名） 1
+total 总共的；总的；总数 1
+totally 完全地 1
+track 轨道；跑道；追踪 1
+tracy 特蕾西（人名） 1
+traditionally 传统上；惯例上 1
+trainer 教练；训练者 1
+translate 翻译 1
+treatment 治疗；对待 1
+treetop 树梢；树顶 1
+tropical 热带的 1
+trouser 裤子 1
+truck 卡车 1
+truly 真正地；真诚地 1
+turkey 土耳其；火鸡 1
+turtle 海龟；乌龟 1
+tv 电视（TV） 1
+twenty 二十；二十个 1
+typical 典型的；有代表性的 1
+uk 英国（UK） 1
+unable 不能的；无法的 1
+unbelievable 难以置信的 1
+underwater 水下的；在水下 1
+unemployment 失业；失业率 1
+unhealthy 不健康的 1
+unlocked 未锁的；开着的 1
+unluckily 不幸地 1
+unsafe 不安全的 1
+upon 在……之上；在……时 1
+useless 无用的；无效的 1
+valley 山谷；流域 1
+valuable 宝贵的；有价值的 1
+vancouver 温哥华（加拿大城市） 1
+variety 多样性；种类 1
+various 各种各样的 1
+vast 巨大的；广阔的 1
+video 视频；录像 1
+villager 村民 1
+vocational 职业的；职业教育的 1
+waffle 华夫饼 1
+waiter 服务员 1
+waldo 沃尔多（人名） 1
+war 战争 1
+warmer 更暖和的（warm的比较级） 1
+watermelon 西瓜 1
+waterway 水路；航道 1
+wave 波浪；挥手；波动 1
+wealthy 富有的；富裕的 1
+weapon 武器 1
+wear 穿；戴；磨损 1
+website 网站 1
+weigh 称重；重 1
+weightless 失重的；无重量的 1
+wen 文（人名） 1
+west 西方；西部的 1
+whatever 无论什么；任何东西 1
+wheat 小麦 1
+whitesburg 怀特斯堡（地名） 1
+whom 谁（宾格） 1
+whose 谁的 1
+wide 宽的；广泛的 1
+wind 风；缠绕 1
+windy 有风的；多风的 1
+wise 明智的；聪明的 1
+wolf 狼 1
+wood 木头；木材 1
+workout 锻炼；训练 1
+workplace 工作场所 1
+wow 哇（感叹词） 1
+wrap 包裹；缠绕 1
+yard 院子；码 1
+yellow 黄色的 1
+zero 零；零度 1
+zhang 张（姓氏） 1
+zoo 动物园 1
+</script>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var wordEl = $('word'), countEl = $('count'), meaningEl = $('meaning');
+  var progressEl = $('progress'), statusEl = $('status');
+  var navEl = $('nav'), btnsEl = $('btns'), optionsEl = $('options');
+  var timerEl = $('timer'), ringFg = $('ringFg'), timerNum = $('timerNum');
+  var footerTest = $('footerTest'), footerQuiz = $('footerQuiz');
+  var navBtns = { prev: $('prevBtn'), next: $('nextBtn'), back: $('backBtn'), restart: $('restartBtn') };
+  var btnKnow = $('btnKnow'), btnUnknown = $('btnUnknown');
+  var fileInputLib = $('fileInputLib'), fileInputRec = $('fileInputRec'), fileInputQuiz = $('fileInputQuiz');
+  var panel = $('panel'), panelList = $('panelList'), panelTitle = $('panelTitle');
+  var menuEl = $('menu');
+  var optEls = [$('opt0'), $('opt1'), $('opt2'), $('opt3')];
+
+  var words = [];
+  var answers = {};
+  var pos = 0;
+  var finished = false;
+  var sourceText = '';
+  var sourceName = '内置词库：广东3+证书英语2016-2026真题全部词汇';
+  var panelFilter = 'all';
+  var mode = 'test';
+
+  var TIMED_MS = 5000;
+  var RING_C = 2 * Math.PI * 32;
+
+  // ================= 解析 =================
+  function parseWordLine(line) {
+    line = String(line).replace(/^\uFEFF/, '').trim();
+    if (!line || line.charAt(0) === '#') return null;
+    var sp = line.indexOf(' ');
+    if (sp < 0) return { w: line, m: '', c: 0 };
+    var w = line.slice(0, sp);
+    var rest = line.slice(sp + 1).trim();
+    var c = 0;
+    var lastSp = rest.lastIndexOf(' ');
+    if (lastSp >= 0) {
+      var last = rest.slice(lastSp + 1).trim();
+      if (/^\d+$/.test(last)) {
+        c = parseInt(last, 10);
+        rest = rest.slice(0, lastSp).trim();
+      }
+    }
+    return { w: w, m: rest, c: c };
+  }
+
+  function parseText(text) {
+    var out = [];
+    var lines = String(text).split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var item = parseWordLine(lines[i]);
+      if (item) out.push(item);
+    }
+    return out;
+  }
+
+  function parseRecord(text) {
+    var lines = String(text).split(/\r?\n/);
+    var section = null, progress = null, recs = [], hasMark = false;
+    for (var i = 0; i < lines.length; i++) {
+      var line = String(lines[i]).replace(/^\uFEFF/, '').trim();
+      if (!line) continue;
+      if (line.charAt(0) === '#') {
+        var body = line.slice(1).trim();
+        if (body.indexOf('不认识') === 0) { section = 'unknown'; hasMark = true; }
+        else if (body.indexOf('不熟悉') === 0) { section = 'vague'; hasMark = true; }
+        else if (body.indexOf('认识') === 0) { section = 'known'; hasMark = true; }
+        else if (body.indexOf('进度') === 0) {
+          hasMark = true;
+          var n = parseInt(body.replace(/\D/g, ''), 10);
+          if (!isNaN(n)) progress = n;
+        }
+        continue;
+      }
+      var item = parseWordLine(line);
+      if (item && section) recs.push({ w: item.w, m: item.m, c: item.c, cat: section });
+    }
+    return hasMark ? { progress: progress, recs: recs } : null;
+  }
+
+  // ================= 保存/恢复 =================
+  function save() {
+    try {
+      localStorage.setItem('vocabfilter_state', JSON.stringify({
+        text: sourceText, name: sourceName, answers: answers, pos: pos, mode: mode
+      }));
+    } catch (e) {}
+  }
+
+  function saveQuiz() {
+    try {
+      localStorage.setItem('vocabfilter_quiz', JSON.stringify({
+        known: quizKnown.pool, unknown: quizUnknown.pool, groupSize: quizGroupSize
+      }));
+    } catch (e) {}
+  }
+
+  function firstUnanswered(from) {
+    for (var i = (from || 0); i < words.length; i++) {
+      if (!answers[words[i].w]) return i;
+    }
+    for (var j = 0; j < words.length; j++) {
+      if (!answers[words[j].w]) return j;
+    }
+    return -1;
+  }
+
+  function restore() {
+    try {
+      var raw = localStorage.getItem('vocabfilter_state');
+      if (!raw) return false;
+      var st = JSON.parse(raw);
+      if (!st || !st.text) return false;
+      sourceText = st.text;
+      sourceName = st.name || '已导入的词库';
+      answers = st.answers || {};
+      words = parseText(sourceText);
+      if (words.length === 0) return false;
+      pos = (typeof st.pos === 'number') ? st.pos : Math.max(0, firstUnanswered(0));
+      if (pos < 0 || pos >= words.length) pos = 0;
+      if (MODES.indexOf(st.mode) >= 0) mode = st.mode;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function restoreQuiz() {
+    try {
+      var raw = localStorage.getItem('vocabfilter_quiz');
+      if (!raw) return;
+      var q = JSON.parse(raw);
+      if (q && q.known) quizKnown.pool = q.known;
+      if (q && q.unknown) quizUnknown.pool = q.unknown;
+      if (q && typeof q.groupSize === 'number') { quizGroupSize = q.groupSize; groupSizeSaved = true; }
+    } catch (e) {}
+  }
+
+  function doneCount() {
+    var n = 0;
+    for (var k in answers) if (answers.hasOwnProperty(k)) n++;
+    return n;
+  }
+
+  function countOf(cat) {
+    var n = 0;
+    for (var k in answers) if (answers.hasOwnProperty(k) && answers[k] === cat) n++;
+    return n;
+  }
+
+  // ================= 测试模式 =================
+  function showCurrent() {
+    if (finished) { showDone(); return; }
+    var w = words[pos];
+    var cat = answers[w.w];
+    wordEl.textContent = w.w;
+    countEl.textContent = '出现次数：' + w.c;
+
+    if (cat) {
+      meaningEl.textContent = w.m ? w.m : '（无中文释义）';
+      meaningEl.className = 'meaning show';
+    } else {
+      meaningEl.textContent = '按下按钮后显示中文';
+      meaningEl.className = 'meaning';
+    }
+
+    btnKnow.textContent = (cat === 'known') ? '✓ 认识' : '认识';
+    btnUnknown.textContent = (cat === 'unknown') ? '✓ 不认识' : '不认识';
+
+    btnsEl.style.display = 'flex';
+    navBtns.prev.style.display = 'block';
+    navBtns.next.style.display = 'block';
+    navBtns.back.style.display = 'none';
+    navBtns.restart.style.display = 'none';
+
+    progressEl.textContent = '第 ' + (pos + 1) + ' / ' + words.length + ' · 已标记 ' + doneCount();
+  }
+
+  function showDone() {
+    finished = true;
+    wordEl.textContent = '全部完成 🎉';
+    countEl.textContent = '认识 ' + countOf('known') + ' · 不认识 ' + countOf('unknown') +
+      (countOf('vague') ? ' · 不熟悉 ' + countOf('vague') : '');
+    meaningEl.textContent = '点「导出记录」保存记录文件';
+    meaningEl.className = 'meaning show';
+    btnsEl.style.display = 'none';
+    navBtns.prev.style.display = 'none';
+    navBtns.next.style.display = 'none';
+    navBtns.back.style.display = 'block';
+    navBtns.restart.style.display = 'block';
+    progressEl.textContent = '第 ' + words.length + ' / ' + words.length + ' · 已标记 ' + doneCount();
+    statusEl.textContent = '导出的记录文件在浏览器下载目录，可再导入接着背';
+  }
+
+  function answer(cat) {
+    if (finished || pos >= words.length) return;
+    var w = words[pos];
+    answers[w.w] = cat;
+    save();
+    showCurrent();
+    if (panel.classList.contains('open')) renderPanel();
+    statusEl.textContent = '已标记「' + w.w + '」为' + (cat === 'known' ? '认识' : '不认识') + '，可改按其它键修改';
+  }
+
+  function goNext() {
+    if (finished) return;
+    if (pos + 1 >= words.length) { showDone(); return; }
+    pos++;
+    save();
+    showCurrent();
+  }
+
+  function goPrev() {
+    if (finished) return;
+    if (pos > 0) pos--;
+    save();
+    showCurrent();
+  }
+
+  function jump() {
+    var s = window.prompt('跳到第几个单词？（1 - ' + words.length + '）', String(pos + 1));
+    if (s === null) return;
+    var n = parseInt(String(s).trim(), 10);
+    if (isNaN(n) || n < 1 || n > words.length) {
+      statusEl.textContent = '请输入 1 到 ' + words.length + ' 之间的数字';
+      return;
+    }
+    gotoIndex(n - 1);
+    statusEl.textContent = '已跳到第 ' + n + ' 个单词';
+  }
+
+  function gotoIndex(i) {
+    finished = false;
+    pos = i;
+    save();
+    showCurrent();
+  }
+
+  function resetAll() {
+    if (!window.confirm('确定清空全部作答记录并重新开始吗？')) return;
+    answers = {};
+    pos = 0;
+    finished = false;
+    save();
+    showCurrent();
+    if (panel.classList.contains('open')) renderPanel();
+    statusEl.textContent = '已清空记录，词库：' + sourceName;
+  }
+
+  function goBack() {
+    finished = false;
+    pos = Math.min(pos, words.length - 1);
+    showCurrent();
+  }
+
+  // ================= 导出 =================
+  function download(name, text) {
+    var blob = new Blob(['\uFEFF' + text], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  function sectionLines(cat) {
+    var lines = [];
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i];
+      if (answers[w.w] === cat) lines.push(w.w + ' ' + w.m + ' ' + w.c);
+    }
+    return lines;
+  }
+
+  function buildRecord() {
+    var out = [];
+    out.push('#单词过滤记录');
+    out.push('#词库 ' + sourceName);
+    out.push('#进度 ' + Math.min(pos + 1, words.length));
+    out.push('#不认识');
+    out = out.concat(sectionLines('unknown'));
+    if (countOf('vague') > 0) {
+      out.push('#不熟悉');
+      out = out.concat(sectionLines('vague'));
+    }
+    out.push('#认识');
+    out = out.concat(sectionLines('known'));
+    return out.join('\n') + '\n';
+  }
+
+  function exportAll() {
+    if (doneCount() === 0) { statusEl.textContent = '还没有作答记录，先按几个按钮吧'; return; }
+    download('vocab_record.txt', buildRecord());
+    statusEl.textContent = '已导出 vocab_record.txt（不认识在上、认识在下，含进度），可再导入接着背';
+  }
+
+  // ================= 导入 =================
+  function applyRecord(rec, fileName) {
+    var kept = 0, skipped = 0;
+    var valid = {};
+    for (var i = 0; i < words.length; i++) valid[words[i].w] = true;
+    var merged = {};
+    for (var j = 0; j < rec.recs.length; j++) {
+      var r = rec.recs[j];
+      if (valid[r.w]) { merged[r.w] = r.cat; kept++; } else skipped++;
+    }
+    answers = merged;
+    var start = (rec.progress && rec.progress >= 1) ? Math.min(rec.progress - 1, words.length - 1) : 0;
+    var idx = firstUnanswered(start);
+    pos = (idx < 0) ? 0 : idx;
+    finished = false;
+    save();
+    showCurrent();
+    if (panel.classList.contains('open')) renderPanel();
+    statusEl.textContent = '已从「' + fileName + '」恢复 ' + kept + ' 条记录' +
+      (skipped ? '（' + skipped + ' 条不在当前词库，已忽略）' : '') +
+      (rec.progress ? '，从第 ' + (pos + 1) + ' 个单词继续' : '');
+  }
+
+  function importLibFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var text = String(reader.result);
+      var rec = parseRecord(text);
+      if (rec) { applyRecord(rec, file.name); return; }
+      var list = parseText(text);
+      if (list.length === 0) { statusEl.textContent = '导入失败：文件里没有识别到单词'; return; }
+      if (doneCount() > 0 && !window.confirm('导入新词库会清除当前作答记录，继续吗？')) return;
+      words = list;
+      sourceText = text;
+      sourceName = '已导入：' + file.name;
+      answers = {};
+      pos = 0;
+      finished = false;
+      save();
+      showCurrent();
+      if (panel.classList.contains('open')) renderPanel();
+      statusEl.textContent = '已导入词库 ' + file.name + '，共 ' + words.length + ' 个单词';
+    };
+    reader.onerror = function () { statusEl.textContent = '读取文件失败'; };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  function importRecFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var rec = parseRecord(String(reader.result));
+      if (!rec) { statusEl.textContent = '这个文件不是记录文件（缺少 #不认识/#认识 标记）'; return; }
+      applyRecord(rec, file.name);
+    };
+    reader.onerror = function () { statusEl.textContent = '读取文件失败'; };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  // ================= 抽题：公共 =================
+  var MODES = ['test', 'quizKnown', 'quizUnknown', 'timedKnown', 'timedUnknown', 'timedMixed'];
+
+  function isTimed() { return mode === 'timedKnown' || mode === 'timedUnknown' || mode === 'timedMixed'; }
+
+  function labelOf(m) {
+    return {
+      test: '测试', quizKnown: '认识词测试', quizUnknown: '不认识词学习',
+      timedKnown: '限时认识词', timedUnknown: '限时不认识词', timedMixed: '混合限时'
+    }[m] || m;
+  }
+
+  var quizKnown = { pool: [], deck: [], cur: null, qTotal: 0, qRight: 0, qWrong: 0, locked: false };
+  var quizUnknown = { pool: [], deck: [], cur: null, qTotal: 0, qRight: 0, qWrong: 0, locked: false };
+  var quizGroupSize = 0;      // 0 = 全部
+  var groupSizeSaved = false;
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  // 当前模式的词库来源
+  function poolForMode(m) {
+    if (m === 'timedMixed') {
+      var seen = {}, out = [];
+      var src = [quizKnown.pool, quizUnknown.pool];
+      for (var s = 0; s < src.length; s++) {
+        for (var i = 0; i < src[s].length; i++) {
+          var w = src[s][i];
+          if (!seen[w.w]) { seen[w.w] = true; out.push(w); }
+        }
+      }
+      return out;
+    }
+    return (m === 'quizUnknown' || m === 'timedUnknown') ? quizUnknown.pool : quizKnown.pool;
+  }
+
+  function quizOf() { return mode === 'quizUnknown' ? quizUnknown : quizKnown; }
+
+  function renderQuestion(item, hint) {
+    wordEl.textContent = item.w;
+    meaningEl.textContent = hint;
+    meaningEl.className = 'meaning';
+    optionsEl.classList.remove('hidden');
+
+    var correct = item.m;
+    var seen = {};
+    seen[correct] = true;
+    var distract = [];
+    for (var i = 0; i < words.length && distract.length < 3; i++) {
+      var m = words[i].m;
+      if (m && !seen[m]) { seen[m] = true; distract.push(m); }
+    }
+    var extraPool = poolForMode(mode);
+    for (var j = 0; j < extraPool.length && distract.length < 3; j++) {
+      var m2 = extraPool[j].m;
+      if (m2 && !seen[m2]) { seen[m2] = true; distract.push(m2); }
+    }
+    var picks = shuffle(distract.slice()).slice(0, 3);
+    var opts = shuffle([correct].concat(picks));
+    for (var k = 0; k < 4; k++) {
+      optEls[k].textContent = opts[k] || '';
+      optEls[k].className = opts[k] ? '' : 'hidden';
+      optEls[k].disabled = !opts[k];
+    }
+  }
+
+  // ---------- 不限时抽题（认识词测试 / 不认识词学习） ----------
+  function quizStart() {
+    var q = quizOf();
+    q.qTotal = 0; q.qRight = 0; q.qWrong = 0;
+    q.cur = null; q.locked = false;
+    var pool = poolForMode(mode);
+    if (pool.length === 0) {
+      wordEl.textContent = labelOf(mode);
+      countEl.textContent = '还没有可用的单词';
+      meaningEl.textContent = '';
+      meaningEl.className = 'meaning';
+      optionsEl.classList.add('hidden');
+      progressEl.textContent = labelOf(mode);
+      statusEl.textContent = '点下方「导入记录TXT」导入测试模式导出的文件，或点「用当前记录」';
+      return;
+    }
+    quizResetDeck(q, pool);
+    quizNext(pool);
+  }
+
+  function quizResetDeck(q, pool) {
+    q.deck = shuffle(pool.slice());
+    if (q.deck.length > 1 && q.cur && q.deck[0].w === q.cur.w) {
+      var t = q.deck[0]; q.deck[0] = q.deck[1]; q.deck[1] = t;
+    }
+  }
+
+  function quizNext(pool) {
+    var q = quizOf();
+    q.locked = false;
+    pool = pool || poolForMode(mode);
+    if (pool.length === 0) { quizStart(); return; }
+    if (q.deck.length === 0) {
+      quizResetDeck(q, pool);
+      statusEl.textContent = '一轮抽完，重新打乱（会有少量重复）';
+    }
+    q.cur = q.deck.shift();
+    q.qTotal++;
+    renderQuestion(q.cur, '选出正确的中文意思');
+    countEl.textContent = '第 ' + q.qTotal + ' 题 · 答对 ' + q.qRight + ' · 答错 ' + q.qWrong;
+    progressEl.textContent = labelOf(mode) + ' · 词库 ' + pool.length + ' 个';
+  }
+
+  function quizAnswer(idx) {
+    var q = quizOf();
+    if (q.locked || !q.cur) return;
+    var btn = optEls[idx];
+    if (!btn.textContent) return;
+    if (btn.textContent === q.cur.m) {
+      btn.className = 'correct';
+      q.qRight++;
+      q.locked = true;
+      for (var i = 0; i < 4; i++) optEls[i].disabled = true;
+      statusEl.textContent = '✓ 答对了：' + q.cur.w + ' = ' + q.cur.m;
+      setTimeout(function () { if (!isTimed() && mode !== 'test') quizNext(); }, 650);
+    } else {
+      btn.className = 'wrong';
+      btn.disabled = true;
+      q.qWrong++;
+      statusEl.textContent = '✗ 不对，再想想「' + q.cur.w + '」的意思';
+    }
+    countEl.textContent = '第 ' + q.qTotal + ' 题 · 答对 ' + q.qRight + ' · 答错 ' + q.qWrong;
+  }
+
+  // ---------- 限时抽题 ----------
+  var timed = {
+    queue: [], cur: null, groupTotal: 0, qTotal: 0, qRight: 0, qWrong: 0, qTimeout: 0,
+    mistakes: {}, locked: false, done: false, deadline: 0, raf: 0
+  };
+
+  function ringSet(frac, alarm) {
+    ringFg.style.strokeDashoffset = String(RING_C * (1 - frac));
+    ringFg.style.stroke = alarm ? '#C62828' : '#1565C0';
+    timerNum.textContent = String(Math.max(0, Math.ceil(frac * TIMED_MS / 1000)));
+  }
+
+  function timerStop() {
+    if (timed.raf) {
+      if (window.cancelAnimationFrame) window.cancelAnimationFrame(timed.raf);
+      else clearTimeout(timed.raf);
+      timed.raf = 0;
+    }
+  }
+
+  function timerTick() {
+    if (timed.locked || timed.done || !timed.cur) return;
+    var left = timed.deadline - Date.now();
+    if (left <= 0) { ringSet(0, true); timedTimeout(); return; }
+    ringSet(left / TIMED_MS, left <= 2000);
+    timed.raf = (window.requestAnimationFrame)
+      ? window.requestAnimationFrame(function () { timerTick(); })
+      : setTimeout(function () { timerTick(); }, 60);
+  }
+
+  function timerStart() {
+    timerStop();
+    timed.deadline = Date.now() + TIMED_MS;
+    ringSet(1, false);
+    timerTick();
+  }
+
+  function timedStats() {
+    return '第 ' + timed.qTotal + ' 题 · 剩余 ' + timed.queue.length +
+      ' · 对 ' + timed.qRight + ' · 错 ' + timed.qWrong + ' · 超时 ' + timed.qTimeout;
+  }
+
+  function timedStart(askSize) {
+    var pool = poolForMode(mode);
+    timed.queue = []; timed.cur = null; timed.groupTotal = 0;
+    timed.qTotal = 0; timed.qRight = 0; timed.qWrong = 0; timed.qTimeout = 0;
+    timed.mistakes = {}; timed.locked = false; timed.done = false;
+    timerStop();
+    timerEl.classList.add('hidden');
+
+    if (pool.length === 0) {
+      wordEl.textContent = labelOf(mode);
+      countEl.textContent = '还没有可用的单词';
+      meaningEl.textContent = '';
+      meaningEl.className = 'meaning';
+      optionsEl.classList.add('hidden');
+      progressEl.textContent = labelOf(mode);
+      statusEl.textContent = '点下方「导入记录TXT」导入测试模式导出的文件，或点「用当前记录」';
+      return;
+    }
+
+    if (askSize) {
+      var s = window.prompt('每组单词数量（0 = 全部）', String(quizGroupSize));
+      if (s !== null && String(s).trim() !== '') {
+        var n = parseInt(String(s).trim(), 10);
+        if (!isNaN(n) && n >= 0) { quizGroupSize = n; groupSizeSaved = true; saveQuiz(); }
+      }
+    }
+
+    // 一组内单词不重复：从词库随机抽取
+    var seen = {}, group = [];
+    var shuffled = shuffle(pool.slice());
+    for (var i = 0; i < shuffled.length; i++) {
+      var w = shuffled[i];
+      if (seen[w.w]) continue;
+      seen[w.w] = true;
+      group.push(w);
+      if (quizGroupSize > 0 && group.length >= quizGroupSize) break;
+    }
+    timed.queue = group;
+    timed.groupTotal = group.length;
+    progressEl.textContent = labelOf(mode) + ' · 每组 ' + (quizGroupSize > 0 ? quizGroupSize : '全部') + ' 词';
+    timedNext();
+  }
+
+  function timedNext() {
+    timerStop();
+    timed.locked = false;
+    if (timed.done) return;
+    if (timed.queue.length === 0) { timedDone(); return; }
+    timed.cur = timed.queue.shift();
+    timed.qTotal++;
+    renderQuestion(timed.cur, '5 秒内选出正确的中文意思');
+    countEl.textContent = timedStats();
+    timerEl.classList.remove('hidden');
+    timerStart();
+  }
+
+  function timedAnswer(idx) {
+    if (timed.locked || timed.done || !timed.cur) return;
+    var btn = optEls[idx];
+    if (!btn.textContent) return;
+    timerStop();
+    timed.locked = true;
+    if (btn.textContent === timed.cur.m) {
+      btn.className = 'correct';
+      for (var i = 0; i < 4; i++) optEls[i].disabled = true;
+      timed.qRight++;
+      statusEl.textContent = '✓ 答对了：' + timed.cur.w + ' = ' + timed.cur.m;
+      countEl.textContent = timedStats();
+      setTimeout(timedNext, 450);
+    } else {
+      btn.className = 'wrong';
+      btn.disabled = true;
+      timed.qWrong++;
+      countEl.textContent = timedStats();
+      timedMistake('答错');
+    }
+  }
+
+  function timedTimeout() {
+    if (timed.locked || timed.done || !timed.cur) return;
+    timed.locked = true;
+    timerStop();
+    ringSet(0, true);
+    timed.qTimeout++;
+    countEl.textContent = timedStats();
+    timedMistake('超时');
+  }
+
+  // 显示正确答案，并按规则补词：错1次插2个，2次3个，3次4个，4个封顶，随机插入后续
+  function timedMistake(reason) {
+    for (var i = 0; i < 4; i++) {
+      if (optEls[i].textContent === timed.cur.m) optEls[i].className = 'correct';
+      optEls[i].disabled = true;
+    }
+    statusEl.textContent = (reason === '超时' ? '⏰ 时间到！' : '✗ 答错了！') +
+      '正确答案：' + timed.cur.m + '，稍后会再出现';
+
+    var w = timed.cur.w;
+    var n = (timed.mistakes[w] || 0) + 1;
+    timed.mistakes[w] = n;
+    var target = Math.min(n + 1, 4);
+    var before = (n <= 1) ? 0 : Math.min(n, 4);
+    var add = target - before;
+    for (var k = 0; k < add; k++) {
+      var at = Math.floor(Math.random() * (timed.queue.length + 1));
+      timed.queue.splice(at, 0, { w: timed.cur.w, m: timed.cur.m, c: timed.cur.c });
+    }
+    setTimeout(timedNext, 1300);
+  }
+
+  function timedDone() {
+    timerStop();
+    timed.done = true;
+    timed.cur = null;
+    timerEl.classList.add('hidden');
+    wordEl.textContent = '本组完成 🎉';
+    countEl.textContent = '共 ' + timed.groupTotal + ' 词 · 出题 ' + timed.qTotal + ' 次 · 答对 ' + timed.qRight +
+      ' · 答错 ' + timed.qWrong + ' · 超时 ' + timed.qTimeout;
+    meaningEl.textContent = '点下方「重来一组」再抽一组';
+    meaningEl.className = 'meaning show';
+    optionsEl.classList.add('hidden');
+    progressEl.textContent = labelOf(mode) + ' · 本组完成';
+    statusEl.textContent = '错得越多的词会被多抽几次，直到答对为止';
+  }
+
+  // ---------- 导入题库（记录文件 / 当前记录） ----------
+  function importTargets() {
+    if (mode === 'quizUnknown' || mode === 'timedUnknown') return ['unknown'];
+    if (mode === 'timedMixed') return ['known', 'unknown'];
+    return ['known'];
+  }
+
+  function restartQuizSession() {
+    if (isTimed()) timedStart(false);
+    else quizStart();
+  }
+
+  function quizLoadFromRecord(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var rec = parseRecord(String(reader.result));
+      if (!rec) { statusEl.textContent = '这个文件不是记录文件（缺少 #不认识/#认识 标记）'; return; }
+      var targets = importTargets();
+      var total = 0;
+      for (var t = 0; t < targets.length; t++) {
+        var cat = targets[t];
+        var list = [];
+        for (var i = 0; i < rec.recs.length; i++) {
+          var r = rec.recs[i];
+          if (r.cat === cat && r.m) list.push({ w: r.w, m: r.m, c: r.c });
+        }
+        if (cat === 'known') quizKnown.pool = list; else quizUnknown.pool = list;
+        total += list.length;
+      }
+      if (total === 0) {
+        statusEl.textContent = '「' + file.name + '」里没有本模式需要的词';
+        return;
+      }
+      saveQuiz();
+      restartQuizSession();
+      statusEl.textContent = '已从「' + file.name + '」导入 ' + total + ' 个词，开始' + labelOf(mode);
+    };
+    reader.onerror = function () { statusEl.textContent = '读取文件失败'; };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  function quizLoadFromCurrent() {
+    var targets = importTargets();
+    var total = 0;
+    for (var t = 0; t < targets.length; t++) {
+      var cat = targets[t];
+      var list = [];
+      for (var i = 0; i < words.length; i++) {
+        if (answers[words[i].w] === cat && words[i].m) list.push({ w: words[i].w, m: words[i].m, c: words[i].c });
+      }
+      if (cat === 'known') quizKnown.pool = list; else quizUnknown.pool = list;
+      total += list.length;
+    }
+    if (total === 0) {
+      statusEl.textContent = '当前测试记录里还没有本模式需要的词';
+      return;
+    }
+    saveQuiz();
+    restartQuizSession();
+    statusEl.textContent = '已用当前记录的 ' + total + ' 个词开始' + labelOf(mode);
+  }
+
+  // ================= 记录列表面板 =================
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderPanel() {
+    var rows = [];
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i];
+      var cat = answers[w.w];
+      if (!cat) continue;
+      if (panelFilter !== 'all' && cat !== panelFilter) continue;
+      var cls = (cat === 'known') ? 'k' : (cat === 'unknown') ? 'u' : 'v';
+      rows.push('<div class="row" data-i="' + i + '">' +
+        '<span class="dot ' + cls + '"></span>' +
+        '<b>' + esc(w.w) + '</b>' +
+        '<span class="m">' + esc(w.m) + '</span>' +
+        '<span class="c">' + w.c + '次</span></div>');
+    }
+    panelTitle.textContent = '单词记录（' + doneCount() + '）';
+    panelList.innerHTML = rows.length
+      ? rows.join('')
+      : '<div class="empty">还没有标记单词</div>';
+  }
+
+  function openPanel() {
+    renderPanel();
+    panel.classList.add('open');
+  }
+
+  function closePanel() {
+    panel.classList.remove('open');
+  }
+
+  panelList.addEventListener('click', function (e) {
+    var t = e.target;
+    while (t && t !== panelList && !(t.getAttribute && t.getAttribute('data-i'))) t = t.parentNode;
+    if (!t || t === panelList) return;
+    var i = parseInt(t.getAttribute('data-i'), 10);
+    if (isNaN(i)) return;
+    closePanel();
+    if (mode !== 'test') setMode('test');
+    gotoIndex(i);
+  });
+
+  var filterBtns = panel.querySelectorAll('.filters button');
+  for (var fi = 0; fi < filterBtns.length; fi++) {
+    (function (btn) {
+      btn.addEventListener('click', function () {
+        panelFilter = btn.getAttribute('data-f');
+        for (var x = 0; x < filterBtns.length; x++) filterBtns[x].classList.remove('active');
+        btn.classList.add('active');
+        renderPanel();
+      });
+    })(filterBtns[fi]);
+  }
+
+  // ================= 模式切换 / 菜单 =================
+  function setMode(m) {
+    mode = m;
+    save();
+    timerStop();
+    timed.done = true;          // 切走时中止未完成的限时局
+    var isTest = (m === 'test');
+
+    $('listBtn').classList.toggle('hidden', !isTest);
+    $('jumpBtn').classList.toggle('hidden', !isTest);
+    navEl.classList.toggle('hidden', !isTest);
+    btnsEl.classList.toggle('hidden', !isTest);
+    footerTest.classList.toggle('hidden', !isTest);
+    footerQuiz.classList.toggle('hidden', isTest);
+    optionsEl.classList.add('hidden');
+    timerEl.classList.add('hidden');
+
+    var items = menuEl.querySelectorAll('.menuItem');
+    for (var i = 0; i < items.length; i++) {
+      items[i].classList.toggle('active', items[i].getAttribute('data-mode') === m);
+    }
+
+    if (isTest) { showCurrent(); }
+    else if (isTimed()) {
+      timed.done = false;
+      $('quizShuffleBtn').textContent = '重来一组';
+      timedStart(!groupSizeSaved);
+    } else {
+      $('quizShuffleBtn').textContent = '重排抽题';
+      quizStart();
+    }
+  }
+
+  function openMenu() { menuEl.classList.remove('hidden'); }
+  function closeMenu() { menuEl.classList.add('hidden'); }
+
+  $('menuBtn').addEventListener('click', openMenu);
+  $('menuClose').addEventListener('click', closeMenu);
+  menuEl.addEventListener('click', function (e) {
+    if (e.target === menuEl) closeMenu();
+  });
+  var menuItems = menuEl.querySelectorAll('.menuItem');
+  for (var mi = 0; mi < menuItems.length; mi++) {
+    (function (btn) {
+      btn.addEventListener('click', function () {
+        closeMenu();
+        setMode(btn.getAttribute('data-mode'));
+      });
+    })(menuItems[mi]);
+  }
+
+  // ================= 事件绑定 =================
+  btnKnow.addEventListener('click', function () { answer('known'); });
+  btnUnknown.addEventListener('click', function () { answer('unknown'); });
+  navBtns.next.addEventListener('click', goNext);
+  navBtns.prev.addEventListener('click', goPrev);
+  navBtns.back.addEventListener('click', goBack);
+  navBtns.restart.addEventListener('click', resetAll);
+  $('jumpBtn').addEventListener('click', jump);
+  $('exportBtn').addEventListener('click', exportAll);
+  $('resetBtn').addEventListener('click', resetAll);
+  $('listBtn').addEventListener('click', openPanel);
+  $('panelClose').addEventListener('click', closePanel);
+  $('panelExport').addEventListener('click', exportAll);
+  $('panelClear').addEventListener('click', resetAll);
+  $('importBtn').addEventListener('click', function () { fileInputLib.click(); });
+  $('panelImport').addEventListener('click', function () { fileInputRec.click(); });
+  $('quizImportBtn').addEventListener('click', function () { fileInputQuiz.click(); });
+  $('quizUseBtn').addEventListener('click', quizLoadFromCurrent);
+  $('quizShuffleBtn').addEventListener('click', function () {
+    if (poolForMode(mode).length === 0 && !isTimed()) {
+      statusEl.textContent = '还没有词，先导入记录';
+      return;
+    }
+    if (isTimed()) { timedStart(true); }
+    else {
+      var q = quizOf();
+      quizResetDeck(q, poolForMode(mode));
+      q.qTotal = 0; q.qRight = 0; q.qWrong = 0;
+      quizNext(poolForMode(mode));
+      statusEl.textContent = '已重新打乱抽题顺序';
+    }
+  });
+  fileInputLib.addEventListener('change', function () {
+    if (fileInputLib.files && fileInputLib.files[0]) importLibFile(fileInputLib.files[0]);
+    fileInputLib.value = '';
+  });
+  fileInputRec.addEventListener('change', function () {
+    if (fileInputRec.files && fileInputRec.files[0]) importRecFile(fileInputRec.files[0]);
+    fileInputRec.value = '';
+  });
+  fileInputQuiz.addEventListener('change', function () {
+    if (fileInputQuiz.files && fileInputQuiz.files[0]) quizLoadFromRecord(fileInputQuiz.files[0]);
+    fileInputQuiz.value = '';
+  });
+  for (var oi = 0; oi < 4; oi++) {
+    (function (idx) {
+      optEls[idx].addEventListener('click', function () {
+        if (isTimed()) timedAnswer(idx);
+        else if (mode !== 'test') quizAnswer(idx);
+      });
+    })(oi);
+  }
+
+  // ================= 启动 =================
+  if (!restore()) {
+    sourceText = $('worddata').textContent;
+    words = parseText(sourceText);
+    answers = {};
+    pos = 0;
+  }
+  restoreQuiz();
+  setMode(mode);
+})();
+</script>
+
+</body>
+</html>
