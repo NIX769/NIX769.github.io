@@ -141,6 +141,73 @@
   .row .m { color: #616161; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .c { color: #9E9E9E; font-size: 12px; flex: none; }
   .empty { text-align: center; color: #BDBDBD; padding: 40px 0; }
+
+  /* ===== 背单词：词组选择 ===== */
+  #picker {
+    position: fixed; inset: 0; z-index: 70;
+    background: rgba(0,0,0,.45);
+    display: none; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  #picker.open { display: flex; }
+  .pickerBox {
+    background: #fff; border-radius: 16px; width: 100%; max-width: 430px;
+    max-height: 84vh; padding: 18px 16px 14px;
+    display: flex; flex-direction: column;
+    overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  }
+  .pickerTitle { font-size: 18px; font-weight: 700; color: #212121; }
+  .pickerHint { color: #9E9E9E; font-size: 12px; line-height: 1.5; margin-top: 4px; }
+  .pickerList {
+    margin: 10px 0 2px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    display: flex; flex-direction: column; gap: 8px;
+    flex: none; min-height: 0;
+    max-height: calc(84vh - 175px);
+  }
+  .groupBtn {
+    display: flex; align-items: center; gap: 10px; text-align: left;
+    padding: 10px 12px; border: 1px solid #E0E0E0; background: #FAFAFA;
+    border-radius: 12px; cursor: pointer; flex: none; font-family: inherit;
+  }
+  .groupBtn:active { background: #EEEEEE; }
+  .groupBtn .badge {
+    flex: none; background: #1565C0; color: #fff; font-size: 13px; font-weight: 700;
+    border-radius: 8px; padding: 7px 9px; min-width: 52px; text-align: center;
+  }
+  .groupBtn .info { flex: 1; min-width: 0; }
+  .groupBtn .info b { display: block; font-size: 15px; color: #212121; }
+  .groupBtn .info span {
+    display: block; color: #9E9E9E; font-size: 12px; margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .groupBtn .num { flex: none; color: #616161; font-size: 13px; }
+  .rangeRow { display: flex; align-items: center; gap: 10px; margin: 16px 0 0; }
+  .rangeRow input {
+    flex: 1; min-width: 0; height: 54px; border: 1px solid #CFD8DC;
+    border-radius: 10px; background: #FAFAFA; color: #212121;
+    text-align: center; font-size: 21px; font-weight: 700; font-family: inherit;
+  }
+  .rangeRow input:focus { outline: none; border-color: #1565C0; background: #fff; }
+  .rangeRow input::-webkit-outer-spin-button,
+  .rangeRow input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .rangeRow input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  .rangeRow span { flex: none; color: #757575; font-size: 15px; }
+  .rangeHint { color: #9E9E9E; font-size: 12px; margin-top: 9px; text-align: center; line-height: 1.6; }
+  .rangeHint b { color: #1565C0; }
+  .pickerActions { display: flex; gap: 8px; margin-top: 14px; }
+  .pickerActions button {
+    flex: 1; height: 46px; border: none; border-radius: 10px;
+    font-size: 14px; cursor: pointer; font-family: inherit;
+  }
+  .pickerActions .ghost { background: #ECEFF1; color: #546E7A; }
+  .pickerActions .primary { background: #1565C0; color: #fff; font-weight: 600; }
+  .pickerActions button:active { opacity: .8; }
+
+  /* ===== 背单词：卡片操作栏 ===== */
+  #memoBtns button { height: 64px; font-size: 17px; }
+  #memoBtns button:disabled { opacity: .38; }
 </style>
 </head>
 <body>
@@ -177,6 +244,12 @@
   <button class="u" id="btnUnknown">不认识</button>
 </div>
 
+<div class="btns hidden" id="memoBtns">
+  <button class="back" id="memoPrev">← 上一个</button>
+  <button class="k" id="memoReveal">显示中文</button>
+  <button class="next" id="memoNext">下一个 →</button>
+</div>
+
 <div class="options hidden" id="options">
   <button id="opt0"></button>
   <button id="opt1"></button>
@@ -196,6 +269,12 @@
   <button class="small" id="quizShuffleBtn">重排抽题</button>
 </div>
 
+<div class="footer hidden" id="footerMemo">
+  <button class="small" id="memoPickBtn">换个词组</button>
+  <button class="small" id="memoKindBtn">切到选择题</button>
+  <button class="small" id="memoRestartBtn">重来本轮</button>
+</div>
+
 <div class="status" id="status">导出的记录文件含进度，可再导入接着背</div>
 <div class="byline">by NIX7</div>
 
@@ -209,6 +288,7 @@
     <button class="menuItem" data-mode="timedKnown">④ 限时认识词</button>
     <button class="menuItem" data-mode="timedUnknown">⑤ 限时不认识词</button>
     <button class="menuItem" data-mode="timedMixed">⑥ 混合限时</button>
+    <button class="menuItem" data-mode="memo">⑦ 背单词</button>
     <button class="menuClose" id="menuClose">关闭</button>
   </div>
 </div>
@@ -230,6 +310,36 @@
     <button data-f="known">认识</button>
   </div>
   <div id="panelList"></div>
+</div>
+
+<!-- 背单词：先选词组，再填范围 -->
+<div id="picker">
+  <div class="pickerBox">
+    <div id="pickerStep1">
+      <div class="pickerTitle">背单词 · 选择词组</div>
+      <div class="pickerHint" id="pickerHint">按出现次数分类，点一组开始</div>
+      <div class="pickerList" id="pickerList"></div>
+      <div class="pickerActions">
+        <button class="ghost" id="pickerImport">导入记录TXT</button>
+        <button class="ghost" id="pickerUse">用当前记录</button>
+        <button class="ghost" id="pickerClose">关闭</button>
+      </div>
+    </div>
+    <div id="pickerStep2" class="hidden">
+      <div class="pickerTitle" id="rangeTitle">选择范围</div>
+      <div class="pickerHint">填入要背的范围：从第几个到第几个</div>
+      <div class="rangeRow">
+        <input type="number" id="rangeFrom" inputmode="numeric" min="0" value="1">
+        <span>到</span>
+        <input type="number" id="rangeTo" inputmode="numeric" min="0" value="0">
+      </div>
+      <div class="rangeHint" id="rangeHint">共 0 个词</div>
+      <div class="pickerActions">
+        <button class="ghost" id="rangeBack">返回词组</button>
+        <button class="primary" id="rangeStart">开始背</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <input type="file" id="fileInputLib" class="hidden" accept=".txt,text/plain">
@@ -2058,6 +2168,8 @@ zoo 动物园 1
   var panel = $('panel'), panelList = $('panelList'), panelTitle = $('panelTitle');
   var menuEl = $('menu');
   var optEls = [$('opt0'), $('opt1'), $('opt2'), $('opt3')];
+  var memoBtns = $('memoBtns'), footerMemo = $('footerMemo'), pickerEl = $('picker');
+  var cardEl = document.querySelector('.card');
 
   var words = [];
   var answers = {};
@@ -2137,7 +2249,8 @@ zoo 动物园 1
   function saveQuiz() {
     try {
       localStorage.setItem('vocabfilter_quiz', JSON.stringify({
-        known: quizKnown.pool, unknown: quizUnknown.pool, groupSize: quizGroupSize
+        known: quizKnown.pool, unknown: quizUnknown.pool, groupSize: quizGroupSize,
+        memoKind: memo.kind
       }));
     } catch (e) {}
   }
@@ -2178,6 +2291,7 @@ zoo 动物园 1
       if (q && q.known) quizKnown.pool = q.known;
       if (q && q.unknown) quizUnknown.pool = q.unknown;
       if (q && typeof q.groupSize === 'number') { quizGroupSize = q.groupSize; groupSizeSaved = true; }
+      if (q && (q.memoKind === 'card' || q.memoKind === 'choice')) memo.kind = q.memoKind;
     } catch (e) {}
   }
 
@@ -2401,14 +2515,15 @@ zoo 动物园 1
   }
 
   // ================= 抽题：公共 =================
-  var MODES = ['test', 'quizKnown', 'quizUnknown', 'timedKnown', 'timedUnknown', 'timedMixed'];
+  var MODES = ['test', 'quizKnown', 'quizUnknown', 'timedKnown', 'timedUnknown', 'timedMixed', 'memo'];
 
   function isTimed() { return mode === 'timedKnown' || mode === 'timedUnknown' || mode === 'timedMixed'; }
 
   function labelOf(m) {
     return {
       test: '测试', quizKnown: '认识词测试', quizUnknown: '不认识词学习',
-      timedKnown: '限时认识词', timedUnknown: '限时不认识词', timedMixed: '混合限时'
+      timedKnown: '限时认识词', timedUnknown: '限时不认识词', timedMixed: '混合限时',
+      memo: '背单词'
     }[m] || m;
   }
 
@@ -2438,7 +2553,7 @@ zoo 动物园 1
       }
       return out;
     }
-    return (m === 'quizUnknown' || m === 'timedUnknown') ? quizUnknown.pool : quizKnown.pool;
+    return (m === 'quizUnknown' || m === 'timedUnknown' || m === 'memo') ? quizUnknown.pool : quizKnown.pool;
   }
 
   function quizOf() { return mode === 'quizUnknown' ? quizUnknown : quizKnown; }
@@ -2705,12 +2820,13 @@ zoo 动物园 1
 
   // ---------- 导入题库（记录文件 / 当前记录） ----------
   function importTargets() {
-    if (mode === 'quizUnknown' || mode === 'timedUnknown') return ['unknown'];
+    if (mode === 'quizUnknown' || mode === 'timedUnknown' || mode === 'memo') return ['unknown'];
     if (mode === 'timedMixed') return ['known', 'unknown'];
     return ['known'];
   }
 
   function restartQuizSession() {
+    if (isMemo()) { openMemoPicker(); return; }
     if (isTimed()) timedStart(false);
     else quizStart();
   }
@@ -2763,6 +2879,334 @@ zoo 动物园 1
     saveQuiz();
     restartQuizSession();
     statusEl.textContent = '已用当前记录的 ' + total + ' 个词开始' + labelOf(mode);
+  }
+
+  // ================= 背单词：顺序版「不认识词」 =================
+  var memo = {
+    active: false, kind: 'card', list: [], idx: 0, label: '',
+    qRight: 0, qWrong: 0, locked: false, revealed: false
+  };
+  var memoPick = { group: -1, words: [], label: '' };
+  var memoTimer = 0;
+
+  function isMemo() { return mode === 'memo'; }
+
+  // 词库：优先用已导入/已保存的「不认识」题库，否则从当前测试记录里取
+  function memoPool() {
+    var pool = quizUnknown.pool || [];
+    if (pool.length) return pool;
+    var list = [];
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i];
+      if (answers[w.w] === 'unknown' && w.m) list.push({ w: w.w, m: w.m, c: w.c });
+    }
+    if (list.length) { quizUnknown.pool = list; saveQuiz(); }
+    return list;
+  }
+
+  // 按出现次数分组（次数高的在前），组内保持原有顺序
+  function memoGroups() {
+    var pool = memoPool();
+    var seen = {}, keys = [], map = {};
+    for (var i = 0; i < pool.length; i++) {
+      var w = pool[i];
+      if (!w || !w.w || seen[w.w]) continue;
+      seen[w.w] = true;
+      var k = String(w.c || 0);
+      if (!map[k]) { map[k] = { c: (w.c || 0), items: [] }; keys.push(k); }
+      map[k].items.push(w);
+    }
+    var arr = [];
+    for (var j = 0; j < keys.length; j++) arr.push(map[keys[j]]);
+    arr.sort(function (a, b) { return b.c - a.c; });
+    return arr;
+  }
+
+  function memoPreview(items) {
+    var s = [], n = Math.min(3, items.length);
+    for (var i = 0; i < n; i++) s.push(items[i].w);
+    return s.join(' · ');
+  }
+
+  function renderMemoPicker() {
+    var groups = memoGroups();
+    var total = 0, html = [];
+    for (var i = 0; i < groups.length; i++) total += groups[i].items.length;
+    $('pickerStep1').classList.remove('hidden');
+    $('pickerStep2').classList.add('hidden');
+
+    if (!groups.length) {
+      $('pickerHint').textContent = '还没有可背的词';
+      $('pickerList').innerHTML = '<div class="empty" style="padding:26px 0;line-height:1.9;color:#90A4AE">' +
+        '还没有「不认识」的词<br><span style="font-size:12px">先测试标记，或点下面导入记录 / 用当前记录</span></div>';
+      return;
+    }
+    html.push('<button class="groupBtn" data-g="-1">' +
+      '<span class="badge" style="background:#455A64">全部</span>' +
+      '<span class="info"><b>全部词组</b><span>按出现次数从高到低连排</span></span>' +
+      '<span class="num">' + total + ' 词</span></button>');
+    for (var g = 0; g < groups.length; g++) {
+      var grp = groups[g];
+      html.push('<button class="groupBtn" data-g="' + g + '">' +
+        '<span class="badge">' + grp.c + ' 次</span>' +
+        '<span class="info"><b>出现 ' + grp.c + ' 次的词</b><span>' + esc(memoPreview(grp.items)) + '</span></span>' +
+        '<span class="num">' + grp.items.length + ' 词</span></button>');
+    }
+    $('pickerHint').textContent = '共 ' + groups.length + ' 组 · ' + total + ' 个不认识的词';
+    $('pickerList').innerHTML = html.join('');
+  }
+
+  function openMemoPicker() {
+    memo.active = false;
+    memo.list = [];
+    memo.idx = 0;
+    memo.locked = false;
+    memo.revealed = false;
+    if (memoTimer) { clearTimeout(memoTimer); memoTimer = 0; }
+    navEl.classList.add('hidden');
+    btnsEl.classList.add('hidden');
+    memoBtns.classList.add('hidden');
+    optionsEl.classList.add('hidden');
+    timerEl.classList.add('hidden');
+    footerMemo.classList.add('hidden');
+    footerQuiz.classList.add('hidden');
+    wordEl.textContent = '背单词';
+    countEl.textContent = '顺序背「不认识」的词';
+    meaningEl.textContent = '先选词组，再填要背的范围';
+    meaningEl.className = 'meaning';
+    progressEl.textContent = '背单词 · 顺序版';
+    statusEl.textContent = '只会背标记为「不认识」的词';
+    renderMemoPicker();
+    pickerEl.classList.add('open');
+  }
+
+  function closeMemoPicker() { pickerEl.classList.remove('open'); }
+
+  function memoCancelPicker() {
+    closeMemoPicker();
+    if (memo.active) {
+      if (memo.kind === 'choice') memoRenderChoice();
+      else memoRenderCard();
+    } else {
+      setMode('test');
+    }
+  }
+
+  function memoChooseGroup(g) {
+    var groups = memoGroups();
+    var items;
+    if (g < 0) {
+      items = [];
+      var seen = {};
+      for (var i = 0; i < groups.length; i++) {
+        for (var j = 0; j < groups[i].items.length; j++) {
+          var w = groups[i].items[j];
+          if (seen[w.w]) continue;
+          seen[w.w] = true;
+          items.push(w);
+        }
+      }
+    } else {
+      if (!groups[g]) return;
+      items = groups[g].items;
+    }
+    if (!items.length) return;
+    memoPick.group = g;
+    memoPick.words = items;
+    memoPick.label = (g < 0) ? '全部' : ('出现 ' + groups[g].c + ' 次');
+    $('rangeTitle').textContent = memoPick.label + ' · 共 ' + items.length + ' 个词';
+    $('rangeFrom').value = '1';
+    $('rangeTo').value = String(items.length);
+    updateMemoRangeHint();
+    $('pickerStep1').classList.add('hidden');
+    $('pickerStep2').classList.remove('hidden');
+    try { $('rangeFrom').focus(); } catch (e) {}
+  }
+
+  // 范围解析：0 0 = 全部；0 = 该端默认；越界自动夹紧
+  function memoRange() {
+    var n = memoPick.words.length;
+    var a = parseInt($('rangeFrom').value, 10);
+    var b = parseInt($('rangeTo').value, 10);
+    if (isNaN(a) || a < 0) a = 0;
+    if (isNaN(b) || b < 0) b = 0;
+    if (a === 0 && b === 0) { a = 1; b = n; }
+    if (a === 0) a = 1;
+    if (b === 0) b = n;
+    if (a > n) a = n;
+    if (b > n) b = n;
+    if (b < a) { var t = a; a = b; b = t; }
+    if (a < 1) a = 1;
+    return { a: a, b: b };
+  }
+
+  function updateMemoRangeHint() {
+    var n = memoPick.words.length;
+    if (!n) return;
+    var r = memoRange();
+    $('rangeHint').innerHTML = '第 <b>' + r.a + '</b> 到第 <b>' + r.b + '</b>，共 <b>' +
+      (r.b - r.a + 1) + '</b> 个（填 0 0 表示全部）';
+  }
+
+  function memoStartRange() {
+    if (!memoPick.words.length) return;
+    var r = memoRange();
+    var list = memoPick.words.slice(r.a - 1, r.b);
+    if (!list.length) return;
+    memoStart(list, memoPick.label + ' ' + r.a + '~' + r.b);
+  }
+
+  function memoStart(list, label) {
+    if (memoTimer) { clearTimeout(memoTimer); memoTimer = 0; }
+    memo.active = true;
+    memo.list = list;
+    memo.idx = 0;
+    memo.label = label;
+    memo.qRight = 0;
+    memo.qWrong = 0;
+    memo.locked = false;
+    memo.revealed = false;
+    closeMemoPicker();
+    footerMemo.classList.remove('hidden');
+    $('memoKindBtn').textContent = (memo.kind === 'card') ? '切到选择题' : '切到卡片';
+    if (memo.kind === 'choice') memoRenderChoice();
+    else memoRenderCard();
+    statusEl.textContent = '顺序背诵：' + label + '（共 ' + list.length + ' 个）';
+  }
+
+  function memoRenderCard() {
+    var item = memo.list[memo.idx];
+    if (!item) return;
+    navEl.classList.add('hidden');
+    btnsEl.classList.add('hidden');
+    optionsEl.classList.add('hidden');
+    memoBtns.classList.remove('hidden');
+    wordEl.textContent = item.w;
+    countEl.textContent = '出现次数：' + item.c;
+    if (memo.revealed) {
+      meaningEl.textContent = item.m ? item.m : '（无中文释义）';
+      meaningEl.className = 'meaning show';
+      $('memoReveal').textContent = '隐藏中文';
+    } else {
+      meaningEl.textContent = '想一想，再点「显示中文」';
+      meaningEl.className = 'meaning';
+      $('memoReveal').textContent = '显示中文';
+    }
+    $('memoPrev').disabled = (memo.idx === 0);
+    $('memoNext').textContent = (memo.idx === memo.list.length - 1) ? '完成 ✓' : '下一个 →';
+    progressEl.textContent = '背单词 · ' + memo.label + ' · 第 ' + (memo.idx + 1) + ' / ' + memo.list.length;
+  }
+
+  function memoRenderChoice() {
+    var item = memo.list[memo.idx];
+    if (!item) return;
+    memo.locked = false;
+    navEl.classList.remove('hidden');
+    btnsEl.classList.add('hidden');
+    memoBtns.classList.add('hidden');
+    navBtns.prev.style.display = 'block';
+    navBtns.next.style.display = 'block';
+    navBtns.back.style.display = 'none';
+    navBtns.restart.style.display = 'none';
+    renderQuestion(item, '选出正确的中文意思');
+    countEl.textContent = '选择题 · 对 ' + memo.qRight + ' · 错 ' + memo.qWrong;
+    progressEl.textContent = '背单词 · ' + memo.label + ' · 第 ' + (memo.idx + 1) + ' / ' + memo.list.length;
+  }
+
+  function memoRevealToggle() {
+    if (!memo.active || memo.kind !== 'card') return;
+    memo.revealed = !memo.revealed;
+    memoRenderCard();
+  }
+
+  function memoGo(d) {
+    if (!memo.active) return;
+    if (memoTimer) { clearTimeout(memoTimer); memoTimer = 0; }
+    var ni = memo.idx + d;
+    if (ni < 0) return;
+    if (ni >= memo.list.length) { memoFinish(); return; }
+    memo.idx = ni;
+    memo.revealed = false;
+    if (memo.kind === 'choice') memoRenderChoice();
+    else memoRenderCard();
+  }
+
+  function memoAnswer(idx) {
+    if (!memo.active || memo.locked) return;
+    var item = memo.list[memo.idx];
+    if (!item) return;
+    var btn = optEls[idx];
+    if (!btn || !btn.textContent) return;
+    if (btn.textContent === item.m) {
+      memo.locked = true;
+      btn.className = 'correct';
+      for (var i = 0; i < 4; i++) optEls[i].disabled = true;
+      memo.qRight++;
+      countEl.textContent = '选择题 · 对 ' + memo.qRight + ' · 错 ' + memo.qWrong;
+      statusEl.textContent = '✓ 答对了：' + item.w + ' = ' + item.m;
+      if (memoTimer) clearTimeout(memoTimer);
+      memoTimer = setTimeout(function () {
+        memoTimer = 0;
+        if (!isMemo() || !memo.active) return;
+        if (memo.idx + 1 >= memo.list.length) { memoFinish(); return; }
+        memo.idx++;
+        memo.revealed = false;
+        memoRenderChoice();
+      }, 750);
+    } else {
+      btn.className = 'wrong';
+      btn.disabled = true;
+      memo.qWrong++;
+      countEl.textContent = '选择题 · 对 ' + memo.qRight + ' · 错 ' + memo.qWrong;
+      statusEl.textContent = '✗ 再想想「' + item.w + '」的意思';
+    }
+  }
+
+  function memoFinish() {
+    if (memoTimer) { clearTimeout(memoTimer); memoTimer = 0; }
+    memo.locked = true;
+    navEl.classList.add('hidden');
+    memoBtns.classList.add('hidden');
+    optionsEl.classList.add('hidden');
+    wordEl.textContent = '本轮完成 🎉';
+    countEl.textContent = '共 ' + memo.list.length + ' 个词' +
+      (memo.kind === 'choice' ? (' · 对 ' + memo.qRight + ' · 错 ' + memo.qWrong) : '');
+    meaningEl.textContent = '点「换个词组」接着选，或「重来本轮」再走一遍';
+    meaningEl.className = 'meaning show';
+    progressEl.textContent = '背单词 · ' + memo.label + ' · 完成';
+    statusEl.textContent = '顺序背完 ' + memo.list.length + ' 个词';
+  }
+
+  function memoToggleKind() {
+    memo.kind = (memo.kind === 'card') ? 'choice' : 'card';
+    saveQuiz();
+    $('memoKindBtn').textContent = (memo.kind === 'card') ? '切到选择题' : '切到卡片';
+    if (!memo.active) return;
+    if (memoTimer) { clearTimeout(memoTimer); memoTimer = 0; }
+    memo.revealed = false;
+    memo.locked = false;
+    if (memo.kind === 'choice') {
+      memo.qRight = 0;
+      memo.qWrong = 0;
+      memoRenderChoice();
+      statusEl.textContent = '已切换到选择题（顺序固定，不再打乱）';
+    } else {
+      memoRenderCard();
+      statusEl.textContent = '已切换到卡片（点单词或按钮看中文）';
+    }
+  }
+
+  function memoRestart() {
+    if (!memo.active || !memo.list.length) return;
+    if (memoTimer) { clearTimeout(memoTimer); memoTimer = 0; }
+    memo.idx = 0;
+    memo.revealed = false;
+    memo.locked = false;
+    memo.qRight = 0;
+    memo.qWrong = 0;
+    if (memo.kind === 'choice') memoRenderChoice();
+    else memoRenderCard();
+    statusEl.textContent = '已回到本轮第 1 个词';
   }
 
   // ================= 记录列表面板 =================
@@ -2829,13 +3273,22 @@ zoo 动物园 1
     timerStop();
     timed.done = true;          // 切走时中止未完成的限时局
     var isTest = (m === 'test');
+    var isMem = (m === 'memo');
+
+    closeMemoPicker();
+    if (memoTimer) { clearTimeout(memoTimer); memoTimer = 0; }
+    memo.active = false;
+    memo.list = [];
+    memo.idx = 0;
 
     $('listBtn').classList.toggle('hidden', !isTest);
     $('jumpBtn').classList.toggle('hidden', !isTest);
     navEl.classList.toggle('hidden', !isTest);
     btnsEl.classList.toggle('hidden', !isTest);
     footerTest.classList.toggle('hidden', !isTest);
-    footerQuiz.classList.toggle('hidden', isTest);
+    footerQuiz.classList.toggle('hidden', isTest || isMem);
+    footerMemo.classList.add('hidden');
+    memoBtns.classList.add('hidden');
     optionsEl.classList.add('hidden');
     timerEl.classList.add('hidden');
 
@@ -2845,6 +3298,7 @@ zoo 动物园 1
     }
 
     if (isTest) { showCurrent(); }
+    else if (isMem) { openMemoPicker(); }
     else if (isTimed()) {
       timed.done = false;
       $('quizShuffleBtn').textContent = '重来一组';
@@ -2876,8 +3330,8 @@ zoo 动物园 1
   // ================= 事件绑定 =================
   btnKnow.addEventListener('click', function () { answer('known'); });
   btnUnknown.addEventListener('click', function () { answer('unknown'); });
-  navBtns.next.addEventListener('click', goNext);
-  navBtns.prev.addEventListener('click', goPrev);
+  navBtns.next.addEventListener('click', function () { if (isMemo()) memoGo(1); else goNext(); });
+  navBtns.prev.addEventListener('click', function () { if (isMemo()) memoGo(-1); else goPrev(); });
   navBtns.back.addEventListener('click', goBack);
   navBtns.restart.addEventListener('click', resetAll);
   $('jumpBtn').addEventListener('click', jump);
@@ -2920,11 +3374,60 @@ zoo 动物园 1
   for (var oi = 0; oi < 4; oi++) {
     (function (idx) {
       optEls[idx].addEventListener('click', function () {
-        if (isTimed()) timedAnswer(idx);
+        if (isMemo()) memoAnswer(idx);
+        else if (isTimed()) timedAnswer(idx);
         else if (mode !== 'test') quizAnswer(idx);
       });
     })(oi);
   }
+
+  // ================= 背单词：事件绑定 =================
+  $('memoPrev').addEventListener('click', function () { memoGo(-1); });
+  $('memoNext').addEventListener('click', function () { memoGo(1); });
+  $('memoReveal').addEventListener('click', memoRevealToggle);
+  $('memoPickBtn').addEventListener('click', function () { openMemoPicker(); });
+  $('memoKindBtn').addEventListener('click', memoToggleKind);
+  $('memoRestartBtn').addEventListener('click', memoRestart);
+
+  $('pickerClose').addEventListener('click', memoCancelPicker);
+  pickerEl.addEventListener('click', function (e) {
+    if (e.target === pickerEl) memoCancelPicker();
+  });
+  $('pickerList').addEventListener('click', function (e) {
+    var t = e.target;
+    while (t && t !== this && !(t.getAttribute && t.getAttribute('data-g'))) t = t.parentNode;
+    if (!t || t === this) return;
+    var g = parseInt(t.getAttribute('data-g'), 10);
+    if (isNaN(g)) return;
+    memoChooseGroup(g);
+  });
+  $('rangeFrom').addEventListener('input', updateMemoRangeHint);
+  $('rangeTo').addEventListener('input', updateMemoRangeHint);
+  $('rangeFrom').addEventListener('keydown', function (e) { if (e.key === 'Enter') memoStartRange(); });
+  $('rangeTo').addEventListener('keydown', function (e) { if (e.key === 'Enter') memoStartRange(); });
+  $('rangeStart').addEventListener('click', memoStartRange);
+  $('rangeBack').addEventListener('click', function () {
+    $('pickerStep2').classList.add('hidden');
+    $('pickerStep1').classList.remove('hidden');
+  });
+  $('pickerImport').addEventListener('click', function () { fileInputQuiz.click(); });
+  $('pickerUse').addEventListener('click', quizLoadFromCurrent);
+
+  // 卡片模式：点单词区域也能翻中文
+  cardEl.addEventListener('click', function () {
+    if (isMemo() && memo.active && memo.kind === 'card') memoRevealToggle();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isMemo() || !memo.active) return;
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    if (e.key === 'ArrowLeft') { memoGo(-1); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { memoGo(1); e.preventDefault(); }
+    else if (e.key === ' ' || e.key === 'Spacebar') {
+      if (memo.kind === 'card') { memoRevealToggle(); e.preventDefault(); }
+    }
+  });
 
   // ================= 启动 =================
   if (!restore()) {
