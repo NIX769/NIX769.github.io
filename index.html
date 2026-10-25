@@ -203,6 +203,23 @@
   }
   .pickerActions .ghost { background: #ECEFF1; color: #546E7A; }
   .pickerActions .primary { background: #1565C0; color: #fff; font-weight: 600; }
+
+  /* 限时挑战：开始设置 */
+  #timedSetup {
+    position: fixed; inset: 0; z-index: 70;
+    background: rgba(0,0,0,.45);
+    display: none; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  #timedSetup.open { display: flex; }
+  .tsModes { display: flex; gap: 8px; margin-top: 14px; }
+  .tsModes button {
+    flex: 1; padding: 12px 6px; border: 2px solid #E0E0E0; border-radius: 12px;
+    background: #FAFAFA; color: #455A64; font-size: 15px; line-height: 1.5;
+    font-family: inherit; cursor: pointer;
+  }
+  .tsModes button span { font-size: 11px; color: #90A4AE; }
+  .tsModes button.active { border-color: #1565C0; background: #E3F2FD; color: #1565C0; font-weight: 700; }
   .pickerActions button:active { opacity: .8; }
 
   /* ===== 背单词：卡片操作栏 ===== */
@@ -338,6 +355,27 @@
         <button class="ghost" id="rangeBack">返回词组</button>
         <button class="primary" id="rangeStart">开始背</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 限时挑战：每次进入都可选数量与全/半随机 -->
+<div id="timedSetup">
+  <div class="pickerBox">
+    <div class="pickerTitle">限时挑战 · 开始设置</div>
+    <div class="pickerHint" id="tsModeName">限时认识词</div>
+    <div class="rangeRow">
+      <input type="number" id="tsCount" inputmode="numeric" min="0" value="0">
+    </div>
+    <div class="rangeHint">数量（填 <b>0</b> = 全部）</div>
+    <div class="tsModes">
+      <button class="active" id="tsFull">全随机<span>整个词库随机抽</span></button>
+      <button id="tsHalf">半随机<span>只取词库前面的词</span></button>
+    </div>
+    <div class="rangeHint" id="tsHint">全随机：从整个词库随机抽「数量」个词<br>半随机：只取词库<b>前「数量」个词</b>随机放出（如填 50 = 只用前 50 个词）</div>
+    <div class="pickerActions">
+      <button class="ghost" id="tsCancel">取消</button>
+      <button class="primary" id="tsStart">开始</button>
     </div>
   </div>
 </div>
@@ -2250,6 +2288,7 @@ zoo 动物园 1
     try {
       localStorage.setItem('vocabfilter_quiz', JSON.stringify({
         known: quizKnown.pool, unknown: quizUnknown.pool, groupSize: quizGroupSize,
+        groupKind: quizGroupKind,
         memoKind: memo.kind
       }));
     } catch (e) {}
@@ -2291,6 +2330,7 @@ zoo 动物园 1
       if (q && q.known) quizKnown.pool = q.known;
       if (q && q.unknown) quizUnknown.pool = q.unknown;
       if (q && typeof q.groupSize === 'number') { quizGroupSize = q.groupSize; groupSizeSaved = true; }
+      if (q && (q.groupKind === 'full' || q.groupKind === 'half')) quizGroupKind = q.groupKind;
       if (q && (q.memoKind === 'card' || q.memoKind === 'choice')) memo.kind = q.memoKind;
     } catch (e) {}
   }
@@ -2530,6 +2570,7 @@ zoo 动物园 1
   var quizKnown = { pool: [], deck: [], cur: null, qTotal: 0, qRight: 0, qWrong: 0, locked: false };
   var quizUnknown = { pool: [], deck: [], cur: null, qTotal: 0, qRight: 0, qWrong: 0, locked: false };
   var quizGroupSize = 0;      // 0 = 全部
+  var quizGroupKind = 'full'; // full=全随机 half=半随机（只取词库前面的词）
   var groupSizeSaved = false;
 
   function shuffle(arr) {
@@ -2693,7 +2734,7 @@ zoo 动物园 1
       ' · 对 ' + timed.qRight + ' · 错 ' + timed.qWrong + ' · 超时 ' + timed.qTimeout;
   }
 
-  function timedStart(askSize) {
+  function timedStart(count, kind) {
     var pool = poolForMode(mode);
     timed.queue = []; timed.cur = null; timed.groupTotal = 0;
     timed.qTotal = 0; timed.qRight = 0; timed.qWrong = 0; timed.qTimeout = 0;
@@ -2712,27 +2753,27 @@ zoo 动物园 1
       return;
     }
 
-    if (askSize) {
-      var s = window.prompt('每组单词数量（0 = 全部）', String(quizGroupSize));
-      if (s !== null && String(s).trim() !== '') {
-        var n = parseInt(String(s).trim(), 10);
-        if (!isNaN(n) && n >= 0) { quizGroupSize = n; groupSizeSaved = true; saveQuiz(); }
-      }
-    }
+    quizGroupSize = (typeof count === 'number' && count >= 0) ? count : quizGroupSize;
+    quizGroupKind = (kind === 'half') ? 'half' : 'full';
+    groupSizeSaved = true;
+    saveQuiz();
 
-    // 一组内单词不重复：从词库随机抽取
+    // 全随机：整个词库随机抽「数量」个（0=全部）
+    // 半随机：只取词库前「数量」个词（0=全部），随机放出
+    var scope = (quizGroupKind === 'half' && quizGroupSize > 0) ? pool.slice(0, quizGroupSize) : pool.slice();
     var seen = {}, group = [];
-    var shuffled = shuffle(pool.slice());
+    var shuffled = shuffle(scope);
     for (var i = 0; i < shuffled.length; i++) {
       var w = shuffled[i];
       if (seen[w.w]) continue;
       seen[w.w] = true;
       group.push(w);
-      if (quizGroupSize > 0 && group.length >= quizGroupSize) break;
+      if (quizGroupKind === 'full' && quizGroupSize > 0 && group.length >= quizGroupSize) break;
     }
     timed.queue = group;
     timed.groupTotal = group.length;
-    progressEl.textContent = labelOf(mode) + ' · 每组 ' + (quizGroupSize > 0 ? quizGroupSize : '全部') + ' 词';
+    progressEl.textContent = labelOf(mode) + ' · ' +
+      (quizGroupKind === 'half' ? '半随机' : '全随机') + ' ' + (quizGroupSize > 0 ? quizGroupSize : '全部') + ' 词';
     timedNext();
   }
 
@@ -2818,6 +2859,43 @@ zoo 动物园 1
     statusEl.textContent = '错得越多的词会被多抽几次，直到答对为止';
   }
 
+  // ---------- 限时开始设置（每次进入都可选数量与全/半随机） ----------
+  var tsEl = $('timedSetup'), tsCountEl = $('tsCount');
+  var tsFromEntry = false;
+
+  function setTsKind(kind) {
+    quizGroupKind = (kind === 'half') ? 'half' : 'full';
+    $('tsFull').classList.toggle('active', quizGroupKind === 'full');
+    $('tsHalf').classList.toggle('active', quizGroupKind === 'half');
+    $('tsHint').innerHTML = (quizGroupKind === 'half')
+      ? '半随机：只取词库<b>前「数量」个词</b>随机放出（如填 50 = 只用前 50 个词）'
+      : '全随机：从整个词库随机抽「数量」个词（填 0 = 全部）';
+  }
+
+  function openTimedSetup(fromEntry) {
+    tsFromEntry = !!fromEntry;
+    timerStop();                       // 设置期间暂停倒计时
+    $('tsModeName').textContent = labelOf(mode) + ' · 开始设置';
+    tsCountEl.value = String(quizGroupSize);
+    setTsKind(quizGroupKind);
+    tsEl.classList.add('open');
+  }
+
+  function closeTimedSetup() { tsEl.classList.remove('open'); }
+
+  function tsStart() {
+    var n = parseInt(tsCountEl.value, 10);
+    if (isNaN(n) || n < 0) n = 0;
+    closeTimedSetup();
+    timedStart(n, quizGroupKind);
+  }
+
+  function tsCancel() {
+    closeTimedSetup();
+    if (tsFromEntry) { setMode('test'); return; }
+    if (timed.cur && !timed.done && !timed.locked) timerStart();   // 继续当前题
+  }
+
   // ---------- 导入题库（记录文件 / 当前记录） ----------
   function importTargets() {
     if (mode === 'quizUnknown' || mode === 'timedUnknown' || mode === 'memo') return ['unknown'];
@@ -2827,7 +2905,7 @@ zoo 动物园 1
 
   function restartQuizSession() {
     if (isMemo()) { openMemoPicker(); return; }
-    if (isTimed()) timedStart(false);
+    if (isTimed()) timedStart(quizGroupSize, quizGroupKind);
     else quizStart();
   }
 
@@ -3276,6 +3354,7 @@ zoo 动物园 1
     var isMem = (m === 'memo');
 
     closeMemoPicker();
+    closeTimedSetup();
     if (memoTimer) { clearTimeout(memoTimer); memoTimer = 0; }
     memo.active = false;
     memo.list = [];
@@ -3302,7 +3381,7 @@ zoo 动物园 1
     else if (isTimed()) {
       timed.done = false;
       $('quizShuffleBtn').textContent = '重来一组';
-      timedStart(!groupSizeSaved);
+      openTimedSetup(true);          // 每次进入都弹出设置：数量 + 全/半随机
     } else {
       $('quizShuffleBtn').textContent = '重排抽题';
       quizStart();
@@ -3350,7 +3429,7 @@ zoo 动物园 1
       statusEl.textContent = '还没有词，先导入记录';
       return;
     }
-    if (isTimed()) { timedStart(true); }
+    if (isTimed()) { openTimedSetup(false); }
     else {
       var q = quizOf();
       quizResetDeck(q, poolForMode(mode));
@@ -3358,6 +3437,16 @@ zoo 动物园 1
       quizNext(poolForMode(mode));
       statusEl.textContent = '已重新打乱抽题顺序';
     }
+  });
+
+  // 限时开始设置弹窗
+  $('tsFull').addEventListener('click', function () { setTsKind('full'); });
+  $('tsHalf').addEventListener('click', function () { setTsKind('half'); });
+  $('tsStart').addEventListener('click', tsStart);
+  $('tsCancel').addEventListener('click', tsCancel);
+  tsCountEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') tsStart(); });
+  tsEl.addEventListener('click', function (e) {
+    if (e.target === tsEl) tsCancel();
   });
   fileInputLib.addEventListener('change', function () {
     if (fileInputLib.files && fileInputLib.files[0]) importLibFile(fileInputLib.files[0]);
