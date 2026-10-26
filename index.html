@@ -33,6 +33,15 @@
     word-break: break-word; max-width: 100%;
   }
   .count { margin-top: 10px; color: #757575; font-size: 17px; }
+
+  /* 朗读 */
+  .speakRow { display: flex; gap: 8px; margin-top: 10px; }
+  .speakBtn {
+    background: #ECEFF1; color: #546E7A; border: none; border-radius: 16px;
+    padding: 7px 14px; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  .speakBtn:active { opacity: .8; }
+  .speakBtn.on { background: #E3F2FD; color: #1565C0; font-weight: 700; }
   .meaning {
     margin-top: 22px; font-size: 23px; line-height: 1.5;
     min-height: 60px; color: #bdbdbd; max-width: 100%;
@@ -212,6 +221,19 @@
     padding: 16px;
   }
   #timedSetup.open { display: flex; }
+  /* 语音设置 */
+  #voiceSetup {
+    position: fixed; inset: 0; z-index: 70;
+    background: rgba(0,0,0,.45);
+    display: none; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  #voiceSetup.open { display: flex; }
+  .vsRow { margin-top: 12px; }
+  .vsRow .vsLabel {
+    text-align: left; font-size: 13px; color: #546E7A;
+    margin-bottom: 6px; font-weight: 600;
+  }
   .tsModes { display: flex; gap: 8px; margin-top: 14px; }
   .tsModes button {
     flex: 1; padding: 12px 6px; border: 2px solid #E0E0E0; border-radius: 12px;
@@ -238,6 +260,10 @@
 
 <div class="card">
   <div class="word" id="word">单词过滤</div>
+  <div class="speakRow">
+    <button class="speakBtn" id="speakBtn">🔊 读音</button>
+    <button class="speakBtn" id="autoSpeakBtn">自动朗读：关</button>
+  </div>
   <div class="timer hidden" id="timer">
     <svg width="80" height="80" viewBox="0 0 80 80">
       <circle class="ringBg" cx="40" cy="40" r="32"></circle>
@@ -306,6 +332,7 @@
     <button class="menuItem" data-mode="timedUnknown">⑤ 限时不认识词</button>
     <button class="menuItem" data-mode="timedMixed">⑥ 混合限时</button>
     <button class="menuItem" data-mode="memo">⑦ 背单词</button>
+    <button class="menuItem" id="voiceSettingsBtn">⑧ 语音设置</button>
     <button class="menuClose" id="menuClose">关闭</button>
   </div>
 </div>
@@ -376,6 +403,50 @@
     <div class="pickerActions">
       <button class="ghost" id="tsCancel">取消</button>
       <button class="primary" id="tsStart">开始</button>
+    </div>
+  </div>
+</div>
+
+<!-- 语音设置：引擎 / 语速 / 停顿 -->
+<div id="voiceSetup">
+  <div class="pickerBox">
+    <div class="pickerTitle">语音设置</div>
+    <div class="pickerHint">朗读开关、引擎、语速、间隔与停顿</div>
+    <div class="vsRow">
+      <div class="vsLabel">TTS 总开关</div>
+      <div class="tsModes">
+        <button class="active" id="vsOn">开启<span>正常朗读</span></button>
+        <button id="vsOff">关闭<span>全部静音</span></button>
+      </div>
+    </div>
+    <div class="vsRow">
+      <div class="vsLabel">TTS 引擎</div>
+      <div class="tsModes">
+        <button class="active" id="vsSys">系统 TTS<span>离线 · 手机自带语音</span></button>
+        <button id="vsWeb">网络 TTS<span>在线 · 词典级发音</span></button>
+      </div>
+    </div>
+    <div class="vsRow">
+      <div class="vsLabel">语速（1 = 正常，可填 0.5 ~ 2）</div>
+      <div class="rangeRow">
+        <input type="number" id="vsRate" inputmode="decimal" min="0.5" max="2" step="0.1" value="1">
+      </div>
+    </div>
+    <div class="vsRow">
+      <div class="vsLabel">英文与中文的间隔（毫秒）—— their ⏸ 他们的</div>
+      <div class="rangeRow">
+        <input type="number" id="vsGap" inputmode="numeric" min="0" max="3000" step="50" value="300">
+      </div>
+    </div>
+    <div class="vsRow">
+      <div class="vsLabel">读完后停顿（毫秒，之后进入下一题）</div>
+      <div class="rangeRow">
+        <input type="number" id="vsPause" inputmode="numeric" min="0" max="5000" step="50" value="350">
+      </div>
+    </div>
+    <div class="pickerActions">
+      <button class="ghost" id="vsCancel">取消</button>
+      <button class="primary" id="vsSave">保存</button>
     </div>
   </div>
 </div>
@@ -2275,6 +2346,194 @@ zoo 动物园 1
     return hasMark ? { progress: progress, recs: recs } : null;
   }
 
+  // ================= 朗读（系统TTS / 网络TTS，可在菜单设置） =================
+  var autoSpeak = false;
+  var voiceCache = null;
+  var speechEngine = 'system';   // system=系统TTS  web=网络TTS（有道发音）
+  var speechRate = 1;            // 语速倍数 0.5 ~ 2
+  var pauseAfter = 350;          // 读完后停顿（毫秒）再进入下一题
+  var ttsOn = true;              // TTS 总开关（关了全部静音）
+  var pairGap = 300;             // 答对后「英文 ⏸ 中文」两段之间的间隔（毫秒）
+  var speechToken = 0;           // 递增即作废旧朗读
+  var curAudio = null;
+
+  function listVoices() {
+    try {
+      var synth = window.speechSynthesis;
+      if (!synth) return [];
+      if (!voiceCache || !voiceCache.length) {
+        voiceCache = synth.getVoices ? (synth.getVoices() || []) : [];
+        // 语音列表在安卓上是异步加载的，先注册回调等它就绪
+        if (!voiceCache.length) {
+          try {
+            synth.onvoiceschanged = function () {
+              try { voiceCache = synth.getVoices() || []; } catch (e) {}
+            };
+          } catch (e) {}
+        }
+      }
+      return voiceCache;
+    } catch (e) { return []; }
+  }
+
+  function pickVoice(voices, re) {
+    for (var i = 0; i < voices.length; i++) if (re.test(voices[i].lang)) return voices[i];
+    return null;
+  }
+
+  function speakDiag() {
+    try {
+      if (speechEngine === 'web') {
+        return '朗读诊断：引擎=网络TTS（英=有道·中=百度，需联网）· 语速 ' + speechRate + ' · 停顿 ' + pauseAfter + 'ms';
+      }
+      if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+        return '朗读诊断：此浏览器不支持语音合成，可在菜单改用网络TTS';
+      }
+      var voices = listVoices();
+      var en = 0;
+      for (var i = 0; i < voices.length; i++) if (/^en/i.test(voices[i].lang)) en++;
+      var s = '朗读诊断：引擎=系统TTS · 可用语音 ' + voices.length + ' 个，英文 ' + en + ' 个';
+      if (voices.length === 0) s += '（列表为空：等1秒重点一下，或改用网络TTS）';
+      else if (en === 0) s += '（缺英文语音：系统 设置→文字转语音 安装英语，或改用网络TTS）';
+      return s;
+    } catch (e) { return '朗读诊断失败'; }
+  }
+
+  function stopSpeech() {
+    speechToken++;
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+    try {
+      if (curAudio) { curAudio.onended = null; curAudio.onerror = null; curAudio.pause(); }
+    } catch (e) {}
+    curAudio = null;
+  }
+
+  // —— 网络TTS：英文=有道词典发音，中文=百度翻译发音（实测最稳） ——
+  function webUrl(it, useBackup) {
+    if (it.lang === 'zh' || useBackup) {
+      return 'https://fanyi.baidu.com/gettts?lan=' + (it.lang === 'zh' ? 'zh' : 'en') + '&source=web&spd=' +
+        Math.max(0, Math.min(9, Math.round(5 * speechRate))) + '&text=' + encodeURIComponent(it.text);
+    }
+    return 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(it.text) + '&type=2';
+  }
+
+  function speakWeb(items, token, onEnd, onStart, gap) {
+    var idx = 0;
+    function playNext() {
+      if (token !== speechToken) return;
+      if (idx >= items.length) { onEnd(); return; }
+      var it = items[idx];
+      var viaBaidu = (it.lang === 'zh' || it._fb);
+      var a;
+      try { a = new window.Audio(webUrl(it, it._fb)); } catch (e) { idx++; playNext(); return; }
+      curAudio = a;
+      // 有道无语速参数，用播放速度模拟；百度用 spd 参数
+      if (!viaBaidu) {
+        try { a.playbackRate = Math.max(0.5, Math.min(2, speechRate)); } catch (e) {}
+      }
+      a.onplaying = function () { onStart(); };
+      function step() {
+        if (token !== speechToken) return;
+        idx++;
+        if (idx >= items.length) { playNext(); return; }
+        setTimeout(playNext, gap);          // 英文与中文之间的间隔
+      }
+      a.onended = function () { it._fb = 0; step(); };
+      function failed() {
+        if (token !== speechToken) return;
+        if (!it._fb && it.lang !== 'zh') { it._fb = 1; playNext(); return; }  // 换备用源重试一次
+        it._fb = 0; step();                                                       // 仍失败就跳过
+      }
+      a.onerror = failed;
+      try {
+        var p = a.play();
+        if (p && p.catch) p.catch(failed);
+      } catch (e) { failed(); }
+    }
+    playNext();
+  }
+
+  // —— 系统TTS：浏览器语音合成，逐段顺序读，段间可插间隔 ——
+  function speakSystem(items, token, onEnd, onStart, gap) {
+    try {
+      var synth = window.speechSynthesis;
+      var U = window.SpeechSynthesisUtterance;
+      if (!synth || !U) { onEnd(); return; }
+      var voices = listVoices();
+      var idx = 0;
+      function speakNext() {
+        if (token !== speechToken) return;
+        if (idx >= items.length) { onEnd(); return; }
+        var myIdx = idx;
+        var it = items[idx];
+        var u = new U(it.text);
+        u.volume = 1;
+        if (it.lang === 'zh') {
+          var zhV = pickVoice(voices, /^zh/i);
+          u.lang = zhV ? zhV.lang : 'zh-CN';
+          if (zhV) u.voice = zhV;
+          u.rate = Math.max(0.5, Math.min(2, speechRate));
+        } else {
+          var enV = pickVoice(voices, /^en/i);
+          u.lang = enV ? enV.lang : 'en-US';
+          if (enV) u.voice = enV;
+          u.rate = Math.max(0.5, Math.min(2, 0.95 * speechRate));
+        }
+        u.onstart = function () { if (myIdx === 0) onStart(); };
+        function step() {
+          if (token !== speechToken) return;
+          idx++;
+          if (idx >= items.length) { onEnd(); return; }
+          setTimeout(speakNext, gap);        // 英文与中文之间的间隔
+        }
+        u.onend = step;
+        u.onerror = step;
+        try { synth.speak(u); } catch (e2) { onEnd(); }
+      }
+      // 安卓上 cancel 后立刻 speak 会被吞掉，延迟一拍再读
+      setTimeout(function () { if (token === speechToken) speakNext(); }, 80);
+    } catch (e) { onEnd(); }
+  }
+
+  // 按顺序朗读若干段 [{text, lang:'en'|'zh'}]，全部读完才调 done
+  function speakTexts(items, done) {
+    stopSpeech();
+    if (!ttsOn || !items || !items.length) { if (done) done(); return; }
+    var token = speechToken;
+    var finished = false, started = false;
+    function finish() {
+      if (finished || token !== speechToken) return;
+      finished = true;
+      if (done) done();
+    }
+    function onStart() { if (token === speechToken) started = true; }
+    setTimeout(function () { if (!started) finish(); }, 2000);   // 没起跑：引擎没反应
+    setTimeout(finish, 30000);                                   // 兜底，绝不卡住流程
+    if (speechEngine === 'web') speakWeb(items, token, finish, onStart, pairGap);
+    else speakSystem(items, token, finish, onStart, pairGap);
+  }
+
+  // 只读英文单词（界面提示语是中文，不读）
+  function speakCurrent() {
+    var w = String(wordEl.textContent || '').trim();
+    if (w && !/[\u4e00-\u9fa5]/.test(w)) speakTexts([{ text: w, lang: 'en' }], null);
+  }
+
+  // 答对后朗读「英文 + 中文」，例如 their 他们的（先读英文，再读中文）
+  // 全部读完才回调 done（调用方按 pauseAfter 停顿后进入下一题）
+  function speakPair(word, meaning, done) {
+    if (!word) { if (done) done(); return; }
+    var items = [{ text: word, lang: 'en' }];
+    if (meaning) items.push({ text: String(meaning).replace(/[；;]/g, '，'), lang: 'zh' });
+    speakTexts(items, done);
+  }
+
+  function updateSpeakBtn() {
+    var b = $('autoSpeakBtn');
+    b.textContent = '自动朗读：' + (autoSpeak ? '开' : '关');
+    b.classList.toggle('on', autoSpeak);
+  }
+
   // ================= 保存/恢复 =================
   function save() {
     try {
@@ -2289,7 +2548,13 @@ zoo 动物园 1
       localStorage.setItem('vocabfilter_quiz', JSON.stringify({
         known: quizKnown.pool, unknown: quizUnknown.pool, groupSize: quizGroupSize,
         groupKind: quizGroupKind,
-        memoKind: memo.kind
+        autoSpeak: autoSpeak ? 1 : 0,
+        memoKind: memo.kind,
+        speechEngine: speechEngine,
+        speechRate: speechRate,
+        pauseAfter: pauseAfter,
+        ttsOn: ttsOn ? 1 : 0,
+        pairGap: pairGap
       }));
     } catch (e) {}
   }
@@ -2331,7 +2596,13 @@ zoo 动物园 1
       if (q && q.unknown) quizUnknown.pool = q.unknown;
       if (q && typeof q.groupSize === 'number') { quizGroupSize = q.groupSize; groupSizeSaved = true; }
       if (q && (q.groupKind === 'full' || q.groupKind === 'half')) quizGroupKind = q.groupKind;
+      if (q && (q.autoSpeak === 1 || q.autoSpeak === true)) autoSpeak = true;
       if (q && (q.memoKind === 'card' || q.memoKind === 'choice')) memo.kind = q.memoKind;
+      if (q && (q.speechEngine === 'system' || q.speechEngine === 'web')) speechEngine = q.speechEngine;
+      if (q && typeof q.speechRate === 'number') speechRate = Math.max(0.5, Math.min(2, q.speechRate));
+      if (q && typeof q.pauseAfter === 'number') pauseAfter = Math.max(0, Math.min(5000, Math.round(q.pauseAfter)));
+      if (q && typeof q.ttsOn === 'number') ttsOn = q.ttsOn !== 0;
+      if (q && typeof q.pairGap === 'number') pairGap = Math.max(0, Math.min(3000, Math.round(q.pairGap)));
     } catch (e) {}
   }
 
@@ -2373,6 +2644,7 @@ zoo 动物园 1
     navBtns.restart.style.display = 'none';
 
     progressEl.textContent = '第 ' + (pos + 1) + ' / ' + words.length + ' · 已标记 ' + doneCount();
+    if (autoSpeak) speakCurrent();
   }
 
   function showDone() {
@@ -2626,6 +2898,7 @@ zoo 动物园 1
       optEls[k].className = opts[k] ? '' : 'hidden';
       optEls[k].disabled = !opts[k];
     }
+    if (autoSpeak) speakCurrent();
   }
 
   // ---------- 不限时抽题（认识词测试 / 不认识词学习） ----------
@@ -2682,7 +2955,11 @@ zoo 动物园 1
       q.locked = true;
       for (var i = 0; i < 4; i++) optEls[i].disabled = true;
       statusEl.textContent = '✓ 答对了：' + q.cur.w + ' = ' + q.cur.m;
-      setTimeout(function () { if (!isTimed() && mode !== 'test') quizNext(); }, 650);
+      speakPair(q.cur.w, q.cur.m, function () {   // 读完「英文 中文」才进入下一题
+        setTimeout(function () {
+          if (mode === 'quizKnown' || mode === 'quizUnknown') quizNext();
+        }, pauseAfter);
+      });
     } else {
       btn.className = 'wrong';
       btn.disabled = true;
@@ -2894,6 +3171,45 @@ zoo 动物园 1
     closeTimedSetup();
     if (tsFromEntry) { setMode('test'); return; }
     if (timed.cur && !timed.done && !timed.locked) timerStart();   // 继续当前题
+  }
+
+  // ---------- 语音设置（开关 / 引擎 / 语速 / 间隔 / 停顿） ----------
+  var vsEl = $('voiceSetup');
+  var vsEngineChoice = 'system';
+  var vsOnChoice = true;
+
+  function updateVsEngine() {
+    $('vsSys').classList.toggle('active', vsEngineChoice === 'system');
+    $('vsWeb').classList.toggle('active', vsEngineChoice === 'web');
+    $('vsOn').classList.toggle('active', vsOnChoice);
+    $('vsOff').classList.toggle('active', !vsOnChoice);
+  }
+
+  function openVoiceSetup() {
+    vsEngineChoice = (speechEngine === 'web') ? 'web' : 'system';
+    vsOnChoice = ttsOn;
+    $('vsRate').value = String(speechRate);
+    $('vsGap').value = String(pairGap);
+    $('vsPause').value = String(pauseAfter);
+    updateVsEngine();
+    vsEl.classList.add('open');
+  }
+
+  function closeVoiceSetup() { vsEl.classList.remove('open'); }
+
+  function vsSave() {
+    speechEngine = (vsEngineChoice === 'web') ? 'web' : 'system';
+    ttsOn = vsOnChoice;
+    var r = parseFloat($('vsRate').value);
+    if (!isNaN(r)) speechRate = Math.max(0.5, Math.min(2, r));
+    var g = parseInt($('vsGap').value, 10);
+    if (!isNaN(g)) pairGap = Math.max(0, Math.min(3000, g));
+    var p = parseInt($('vsPause').value, 10);
+    if (!isNaN(p)) pauseAfter = Math.max(0, Math.min(5000, p));
+    saveQuiz();
+    closeVoiceSetup();
+    statusEl.textContent = '语音设置已保存：' + (ttsOn ? (speechEngine === 'web' ? '网络TTS' : '系统TTS') : 'TTS关闭') +
+      ' · 语速 ' + speechRate + ' · 间隔 ' + pairGap + 'ms · 停顿 ' + pauseAfter + 'ms';
   }
 
   // ---------- 导入题库（记录文件 / 当前记录） ----------
@@ -3173,6 +3489,7 @@ zoo 动物园 1
     $('memoPrev').disabled = (memo.idx === 0);
     $('memoNext').textContent = (memo.idx === memo.list.length - 1) ? '完成 ✓' : '下一个 →';
     progressEl.textContent = '背单词 · ' + memo.label + ' · 第 ' + (memo.idx + 1) + ' / ' + memo.list.length;
+    if (autoSpeak) speakCurrent();
   }
 
   function memoRenderChoice() {
@@ -3222,15 +3539,17 @@ zoo 动物园 1
       memo.qRight++;
       countEl.textContent = '选择题 · 对 ' + memo.qRight + ' · 错 ' + memo.qWrong;
       statusEl.textContent = '✓ 答对了：' + item.w + ' = ' + item.m;
-      if (memoTimer) clearTimeout(memoTimer);
-      memoTimer = setTimeout(function () {
-        memoTimer = 0;
-        if (!isMemo() || !memo.active) return;
-        if (memo.idx + 1 >= memo.list.length) { memoFinish(); return; }
-        memo.idx++;
-        memo.revealed = false;
-        memoRenderChoice();
-      }, 750);
+      speakPair(item.w, item.m, function () {      // 读完「英文 中文」才进入下一个
+        if (memoTimer) clearTimeout(memoTimer);
+        memoTimer = setTimeout(function () {
+          memoTimer = 0;
+          if (!isMemo() || !memo.active) return;
+          if (memo.idx + 1 >= memo.list.length) { memoFinish(); return; }
+          memo.idx++;
+          memo.revealed = false;
+          memoRenderChoice();
+        }, pauseAfter);
+      });
     } else {
       btn.className = 'wrong';
       btn.disabled = true;
@@ -3346,6 +3665,7 @@ zoo 动物园 1
 
   // ================= 模式切换 / 菜单 =================
   function setMode(m) {
+    closeVoiceSetup();
     mode = m;
     save();
     timerStop();
@@ -3401,7 +3721,9 @@ zoo 动物园 1
     (function (btn) {
       btn.addEventListener('click', function () {
         closeMenu();
-        setMode(btn.getAttribute('data-mode'));
+        var md = btn.getAttribute('data-mode');
+        if (md) setMode(md);
+        else if (btn.id === 'voiceSettingsBtn') openVoiceSetup();
       });
     })(menuItems[mi]);
   }
@@ -3444,9 +3766,38 @@ zoo 动物园 1
   $('tsHalf').addEventListener('click', function () { setTsKind('half'); });
   $('tsStart').addEventListener('click', tsStart);
   $('tsCancel').addEventListener('click', tsCancel);
+  $('vsSys').addEventListener('click', function () { vsEngineChoice = 'system'; updateVsEngine(); });
+  $('vsWeb').addEventListener('click', function () { vsEngineChoice = 'web'; updateVsEngine(); });
+  $('vsOn').addEventListener('click', function () { vsOnChoice = true; updateVsEngine(); });
+  $('vsOff').addEventListener('click', function () { vsOnChoice = false; updateVsEngine(); });
+  $('vsSave').addEventListener('click', vsSave);
+  $('vsCancel').addEventListener('click', closeVoiceSetup);
+  vsEl.addEventListener('click', function (e) { if (e.target === vsEl) closeVoiceSetup(); });
   tsCountEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') tsStart(); });
   tsEl.addEventListener('click', function (e) {
     if (e.target === tsEl) tsCancel();
+  });
+
+  // 朗读
+  $('speakBtn').addEventListener('click', function () {
+    var w = String(wordEl.textContent || '').trim();
+    if (!w || /[\u4e00-\u9fa5]/.test(w)) {
+      statusEl.textContent = '当前没有英文单词可读 · ' + speakDiag();
+      return;
+    }
+    if (!ttsOn) {
+      statusEl.textContent = 'TTS 已关闭（全部静音）：菜单 → ⑧ 语音设置 可开启';
+      return;
+    }
+    statusEl.textContent = '朗读：' + w + ' · ' + speakDiag();
+    speakTexts([{ text: w, lang: 'en' }], null);
+  });
+  $('autoSpeakBtn').addEventListener('click', function () {
+    autoSpeak = !autoSpeak;
+    updateSpeakBtn();
+    saveQuiz();
+    if (autoSpeak) speakCurrent();
+    statusEl.textContent = autoSpeak ? '已开启自动朗读：每个单词会自动读出' : '已关闭自动朗读';
   });
   fileInputLib.addEventListener('change', function () {
     if (fileInputLib.files && fileInputLib.files[0]) importLibFile(fileInputLib.files[0]);
@@ -3526,6 +3877,7 @@ zoo 动物园 1
     pos = 0;
   }
   restoreQuiz();
+  updateSpeakBtn();
   setMode(mode);
 })();
 </script>
