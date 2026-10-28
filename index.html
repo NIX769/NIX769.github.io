@@ -4033,7 +4033,11 @@ zoo 动物园 1
     $('memoPrev').disabled = (memo.idx === 0);
     $('memoNext').textContent = (memo.idx === memo.list.length - 1) ? '完成 ✓' : '下一个 →';
     progressEl.textContent = '背单词 · ' + memo.label + ' · 第 ' + (memo.idx + 1) + ' / ' + memo.list.length;
-    if (autoSpeak) speakCurrent();
+    // 卡片模式：自动朗读读完整「英文 + 中文」，读完英文会接着读中文（不因中文隐藏而只读英文）
+    if (autoSpeak) {
+      if (item.m) speakPair(item.w, item.m, null);
+      else speakCurrent();
+    }
   }
 
   function memoRenderChoice() {
@@ -4056,6 +4060,11 @@ zoo 动物园 1
     if (!memo.active || memo.kind !== 'card') return;
     memo.revealed = !memo.revealed;
     memoRenderCard();
+    // 手动显示中文时读一遍中文，方便跟读记忆（自动朗读时卡片渲染已读完整对，这里不重复读）
+    if (memo.revealed && !autoSpeak) {
+      var item = memo.list[memo.idx];
+      if (item && item.m) speakTexts([{ text: String(item.m).replace(/[；;]/g, '，'), lang: 'zh' }], null);
+    }
   }
 
   function memoGo(d) {
